@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #0a0015; font-family: monospace; color: #fff; }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    /* Debug log overlay — shows until scene is ready, then hides */
+    #debug-log {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      right: 4px;
+      z-index: 1000;
+      font-size: 11px;
+      color: #00ffff;
+      pointer-events: none;
+      white-space: pre-wrap;
+      text-shadow: 0 0 4px #00ffff;
+    }
+    #debug-log.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="debug-log">⏳ Loading Network Highway...</div>
+  <script type="module" src="./panel.tsx"></script>
+</body>
+</html>
