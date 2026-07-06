@@ -14,6 +14,7 @@ const statErrors = document.getElementById("stat-errors")!;
 
 // Drawer state
 let isDrawerOpen = false;
+let isStandalonePreview = false;
 
 // Statistics
 let totalRequests = 0;
@@ -42,6 +43,14 @@ async function main() {
   // Hide debug overlay after a short delay
   setTimeout(() => debugLog.classList.add("hidden"), 2000);
 
+  if (!globalThis.chrome?.runtime?.connect) {
+    debugLogMsg("Standalone preview mode: using sample request traffic");
+    isStandalonePreview = true;
+    startPreviewTraffic(scene);
+    setupToggle();
+    return;
+  }
+
   // Connect to background service worker via long-lived port
   const port = chrome.runtime.connect({ name: "network-highway-panel" });
   debugLogMsg("Connected to background service worker");
@@ -67,6 +76,50 @@ async function main() {
 
   // Setup drawer toggle
   setupToggle();
+}
+
+function startPreviewTraffic(scene: HighwayScene) {
+  const samples: NetworkRequest[] = [
+    makePreviewRequest("GET", 200, 72, 820),
+    makePreviewRequest("POST", 201, 230, 140000),
+    makePreviewRequest("DELETE", 500, 640, 2400, "Preview failure"),
+    makePreviewRequest("PATCH", 302, 410, 76000),
+    makePreviewRequest("GET", 404, 180, 1200),
+  ];
+
+  let index = 0;
+  const spawn = () => {
+    const request = { ...samples[index % samples.length], requestId: `preview-${Date.now()}-${index}` };
+    scene.addRequest(request);
+    updateDashboard(request);
+    index++;
+  };
+
+  for (let i = 0; i < 6; i++) {
+    setTimeout(spawn, i * 550);
+  }
+  setInterval(spawn, 1200);
+}
+
+function makePreviewRequest(
+  method: string,
+  statusCode: number,
+  duration: number,
+  responseSize: number,
+  error?: string
+): NetworkRequest {
+  return {
+    requestId: `preview-${method}-${statusCode}`,
+    url: `https://preview.local/api/${method.toLowerCase()}`,
+    method,
+    statusCode,
+    responseSize,
+    duration,
+    startTime: Date.now(),
+    tabId: 0,
+    type: "xmlhttprequest",
+    error,
+  };
 }
 
 // ─── Drawer Toggle ───
@@ -114,7 +167,7 @@ function updateDashboard(request: NetworkRequest) {
   if (request.error || request.statusCode === 0 || request.statusCode >= 400) {
     errorRequests++;
     // Auto-open drawer on errors
-    if (!isDrawerOpen) {
+    if (!isDrawerOpen && !isStandalonePreview) {
       openDrawer();
     }
   } else {

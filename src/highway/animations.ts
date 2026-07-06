@@ -7,10 +7,12 @@ import { spawnExplosion } from "./effects";
 export function animateCarEnter(
   car: Car,
   targetX: number,
+  targetY: number,
   duration: number
 ): gsap.core.Tween {
   return gsap.to(car, {
     x: targetX,
+    y: targetY,
     alpha: 1,
     duration: Math.max(0.5, duration),
     ease: "power2.out",
@@ -19,9 +21,10 @@ export function animateCarEnter(
 
 // ─── Car exit: drive off the right side and fade ───
 
-export function animateCarExit(car: Car, exitX: number): void {
+export function animateCarExit(car: Car, exitX: number, exitY: number): void {
   gsap.to(car, {
     x: exitX + 100,
+    y: exitY - 36,
     alpha: 0,
     duration: 2.0,
     ease: "power1.in",

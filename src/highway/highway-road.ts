@@ -2,17 +2,23 @@ import { Container, Graphics } from "pixi.js";
 
 // ─── Colors ───
 
-const ROAD_COLOR = 0x08081a;
-const LANE_LINE_COLOR = 0xff00ff; // magenta neon
-const GRID_LINE_COLOR = 0xff0060; // hot pink
-const SHOULDER_COLOR = 0x1a0030;
+const ROAD_COLOR = 0x070814;
+const ROAD_SIDE_COLOR = 0x050612;
+const CYAN_EDGE = 0x00e5ff;
+const MAGENTA_EDGE = 0xff007a;
+const LANE_LINE_COLOR = 0x536277;
+const SCAN_LINE_COLOR = 0x13d7ff;
 
 export class HighwayRoad {
-  private gridLines: Graphics | null = null;
+  private scanLines: Graphics | null = null;
   private scrollOffset = 0;
   private canvasWidth = 0;
-  private roadTop = 0;
-  private roadHeight = 0;
+  private canvasHeight = 0;
+  private startX = 0;
+  private endX = 0;
+  private topStartY = 0;
+  private topEndY = 0;
+  private roadWidth = 0;
   private laneCount = 3;
 
   build(
@@ -24,138 +30,152 @@ export class HighwayRoad {
     laneCount: number
   ) {
     this.canvasWidth = canvasWidth;
-    this.roadTop = canvasHeight * roadTopRatio;
-    this.roadHeight = canvasHeight * roadHeightRatio;
+    this.canvasHeight = canvasHeight;
+    this.startX = -canvasWidth * 0.14;
+    this.endX = canvasWidth + canvasWidth * 0.1;
+    this.topStartY = canvasHeight * (roadTopRatio + roadHeightRatio * 0.8);
+    this.topEndY = canvasHeight * (roadTopRatio - roadHeightRatio * 0.35);
+    this.roadWidth = canvasHeight * roadHeightRatio;
     this.laneCount = laneCount;
     this.scrollOffset = 0;
 
-    // 1. Road shoulder (dark gradient strip above and below road)
-    const shoulder = new Graphics();
-    shoulder.rect(0, this.roadTop - 4, canvasWidth, 4);
-    shoulder.fill({ color: SHOULDER_COLOR, alpha: 0.6 });
-    shoulder.rect(0, this.roadTop + this.roadHeight, canvasWidth, 4);
-    shoulder.fill({ color: SHOULDER_COLOR, alpha: 0.6 });
-    container.addChild(shoulder);
+    // Road shadow/depth, offset downward like the raised roadway in the reference.
+    const depth = new Graphics();
+    this.drawRoadPolygon(depth, 20, ROAD_SIDE_COLOR, 0.95);
+    container.addChild(depth);
 
-    // 2. Road surface
+    // Main dark isometric road deck.
     const surface = new Graphics();
-    surface.rect(0, this.roadTop, canvasWidth, this.roadHeight);
-    surface.fill({ color: ROAD_COLOR });
+    this.drawRoadPolygon(surface, 0, ROAD_COLOR, 1);
     container.addChild(surface);
 
-    // 3. Lane dividers (dashed neon lines)
-    const laneHeight = this.roadHeight / laneCount;
+    // Faint lane dividers.
     for (let i = 1; i < laneCount; i++) {
-      const y = this.roadTop + laneHeight * i;
-      this.drawDashedLine(container, y, LANE_LINE_COLOR, 0.5);
+      const offset = (this.roadWidth / laneCount) * i;
+      this.drawDashedDiagonalLine(container, offset, LANE_LINE_COLOR, 0.42);
     }
 
-    // 4. Top and bottom road edges (solid bright lines)
-    const topEdge = new Graphics();
-    topEdge.rect(0, this.roadTop, canvasWidth, 2);
-    topEdge.fill({ color: 0xff88aa, alpha: 0.8 });
-    container.addChild(topEdge);
+    // Bright cyan and magenta edge rails.
+    this.drawSolidDiagonalLine(container, 0, CYAN_EDGE, 1, 3);
+    this.drawSolidDiagonalLine(container, this.roadWidth, MAGENTA_EDGE, 0.9, 3);
 
-    const bottomEdge = new Graphics();
-    bottomEdge.rect(0, this.roadTop + this.roadHeight - 2, canvasWidth, 2);
-    bottomEdge.fill({ color: 0xff88aa, alpha: 0.5 });
-    container.addChild(bottomEdge);
-
-    // 5. Scrolling grid lines (the classic outrun effect)
-    this.gridLines = new Graphics();
-    container.addChild(this.gridLines);
-    this.drawGridLines();
-
-    // 6. Neon sign strip at horizon (top of road)
-    const horizon = new Graphics();
-    horizon.rect(0, this.roadTop - 2, canvasWidth, 4);
-    horizon.fill({ color: 0xff0060, alpha: 0.6 });
-    container.addChild(horizon);
-
-    horizon.rect(0, this.roadTop - 0.5, canvasWidth, 1);
-    horizon.fill({ color: 0xff88cc, alpha: 1.0 });
-    container.addChild(horizon);
+    // Short moving scan ticks along the edges sell the "data highway" motion.
+    this.scanLines = new Graphics();
+    container.addChild(this.scanLines);
+    this.drawScanLines();
   }
 
   update(dt: number) {
     this.scrollOffset += dt * 3;
-    if (this.scrollOffset > 40) {
-      this.scrollOffset -= 40;
+    if (this.scrollOffset > 72) {
+      this.scrollOffset -= 72;
     }
-    this.drawGridLines();
+    this.drawScanLines();
   }
 
-  // ─── Dashed neon lane dividers ───
+  // ─── Road geometry ───
 
-  private drawDashedLine(
+  private drawRoadPolygon(gfx: Graphics, yOffset: number, color: number, alpha: number) {
+    gfx.moveTo(this.startX, this.topStartY + yOffset);
+    gfx.lineTo(this.endX, this.topEndY + yOffset);
+    gfx.lineTo(this.endX, this.topEndY + this.roadWidth + yOffset);
+    gfx.lineTo(this.startX, this.topStartY + this.roadWidth + yOffset);
+    gfx.closePath();
+    gfx.fill({ color, alpha });
+  }
+
+  private drawSolidDiagonalLine(
     container: Container,
-    y: number,
+    laneOffset: number,
     color: number,
-    alpha: number
+    alpha: number,
+    thickness: number
   ) {
-    const dashLength = 20;
-    const gapLength = 15;
     const gfx = new Graphics();
+    const glow = new Graphics();
+    const y1 = this.topStartY + laneOffset;
+    const y2 = this.topEndY + laneOffset;
 
-    // Glow layer
-    const glowGfx = new Graphics();
-    let x = 0;
-    while (x < this.canvasWidth) {
-      glowGfx.rect(x, y - 2, dashLength, 4);
-      glowGfx.fill({ color, alpha: alpha * 0.2 });
-      x += dashLength + gapLength;
-    }
-    container.addChild(glowGfx);
+    glow.moveTo(this.startX, y1);
+    glow.lineTo(this.endX, y2);
+    glow.stroke({ color, alpha: alpha * 0.22, width: thickness + 8 });
+    container.addChild(glow);
 
-    // Bright layer
-    x = 0;
-    while (x < this.canvasWidth) {
-      gfx.rect(x, y, dashLength, 1);
-      gfx.fill({ color, alpha });
-      x += dashLength + gapLength;
-    }
+    gfx.moveTo(this.startX, y1);
+    gfx.lineTo(this.endX, y2);
+    gfx.stroke({ color, alpha, width: thickness });
     container.addChild(gfx);
   }
 
-  // ─── Scrolling perspective grid (outrun effect) ───
+  // ─── Dashed perspective lane dividers ───
 
-  private drawGridLines() {
-    if (!this.gridLines) return;
+  private drawDashedDiagonalLine(
+    container: Container,
+    laneOffset: number,
+    color: number,
+    alpha: number
+  ) {
+    const dashLength = 30;
+    const gapLength = 28;
+    const gfx = new Graphics();
+    const glow = new Graphics();
+    const roadDx = this.endX - this.startX;
+    const roadDy = this.topEndY - this.topStartY;
+    const roadLength = Math.hypot(roadDx, roadDy);
+    const ux = roadDx / roadLength;
+    const uy = roadDy / roadLength;
+    let d = 18;
 
-    this.gridLines.clear();
+    while (d < roadLength - 18) {
+      const sx = this.startX + ux * d;
+      const sy = this.topStartY + laneOffset + uy * d;
+      const ex = this.startX + ux * Math.min(d + dashLength, roadLength);
+      const ey = this.topStartY + laneOffset + uy * Math.min(d + dashLength, roadLength);
 
-    const spacing = 40;
-    const offset = this.scrollOffset;
+      glow.moveTo(sx, sy);
+      glow.lineTo(ex, ey);
+      glow.stroke({ color, alpha: alpha * 0.14, width: 6 });
 
-    // Vertical grid lines (scrolling left to right to simulate forward motion)
-    for (
-      let x = -spacing + offset;
-      x < this.canvasWidth + spacing;
-      x += spacing
-    ) {
-      // Perspective: lines get closer together toward the top of the road
-      const progressFromBottom = 1; // flat for now
-      const lineAlpha = 0.2;
+      gfx.moveTo(sx, sy);
+      gfx.lineTo(ex, ey);
+      gfx.stroke({ color, alpha, width: 1 });
 
-      // Glow
-      this.gridLines.rect(x - 1, this.roadTop, 2, this.roadHeight);
-      this.gridLines.fill({ color: GRID_LINE_COLOR, alpha: lineAlpha * 0.3 });
-
-      // Bright
-      this.gridLines.rect(x, this.roadTop, 1, this.roadHeight);
-      this.gridLines.fill({ color: GRID_LINE_COLOR, alpha: lineAlpha });
+      d += dashLength + gapLength;
     }
 
-    // Horizontal grid lines (perspective: closer together near top, wider at bottom)
-    const laneHeight = this.roadHeight / this.laneCount;
-    const subDivisions = 4; // sub-lane grid lines for the outrun look
+    container.addChild(glow);
+    container.addChild(gfx);
+  }
 
-    for (let i = 0; i <= this.laneCount * subDivisions; i++) {
-      const fraction = i / (this.laneCount * subDivisions);
-      const y = this.roadTop + this.roadHeight * fraction;
+  // ─── Scrolling scan ticks ───
 
-      this.gridLines.rect(0, y, this.canvasWidth, 1);
-      this.gridLines.fill({ color: GRID_LINE_COLOR, alpha: 0.1 + fraction * 0.15 });
+  private drawScanLines() {
+    if (!this.scanLines) return;
+
+    this.scanLines.clear();
+
+    const spacing = 72;
+    const offset = this.scrollOffset;
+    const roadDx = this.endX - this.startX;
+    const roadDy = this.topEndY - this.topStartY;
+    const roadLength = Math.hypot(roadDx, roadDy);
+    const ux = roadDx / roadLength;
+    const uy = roadDy / roadLength;
+
+    for (let d = -spacing + offset; d < roadLength + spacing; d += spacing) {
+      const edgeOffsets = [0, this.roadWidth];
+      for (const laneOffset of edgeOffsets) {
+        const x = this.startX + ux * d;
+        const y = this.topStartY + laneOffset + uy * d;
+        const tickLength = 18;
+        this.scanLines.moveTo(x, y);
+        this.scanLines.lineTo(x + ux * tickLength, y + uy * tickLength);
+        this.scanLines.stroke({
+          color: laneOffset === 0 ? SCAN_LINE_COLOR : MAGENTA_EDGE,
+          alpha: 0.55,
+          width: 2,
+        });
+      }
     }
   }
 }

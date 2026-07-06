@@ -1,5 +1,5 @@
 import { Application, Container, Ticker } from "pixi.js";
-import type { NetworkRequest } from "../shared/types";
+import type { LanePath, NetworkRequest } from "../shared/types";
 import { CityBackground } from "./city-background";
 import { HighwayRoad } from "./highway-road";
 import { createCarFromRequest } from "./car-factory";
@@ -8,8 +8,8 @@ import { animateCarEnter, animateCrash, animateCarExit } from "./animations";
 
 // ─── Layout constants ───
 
-const ROAD_TOP_RATIO = 0.58; // road starts at 58% of viewport height
-const ROAD_HEIGHT_RATIO = 0.30; // road occupies 30% of viewport height
+const ROAD_TOP_RATIO = 0.58;
+const ROAD_HEIGHT_RATIO = 0.22;
 const LANE_COUNT = 3;
 
 export class HighwayScene {
@@ -22,7 +22,7 @@ export class HighwayScene {
   private city!: CityBackground;
   private road!: HighwayRoad;
 
-  private laneYPositions: number[] = [];
+  private lanePaths: LanePath[] = [];
   private canvasWidth = 0;
   private canvasHeight = 0;
 
@@ -42,6 +42,7 @@ export class HighwayScene {
     this.app.stage.addChild(this.roadLayer);
     this.app.stage.addChild(this.carLayer);
     this.app.stage.addChild(this.effectsLayer);
+    this.carLayer.sortableChildren = true;
 
     // Calculate dimensions
     this.canvasWidth = container.clientWidth;
@@ -78,24 +79,26 @@ export class HighwayScene {
   }
 
   addRequest(request: NetworkRequest) {
-    if (this.laneYPositions.length === 0) return;
+    if (this.lanePaths.length === 0) return;
 
-    const car = createCarFromRequest(request, this.laneYPositions);
+    const car = createCarFromRequest(request, this.lanePaths);
+    car.zIndex = car.y;
     this.carLayer.addChild(car);
 
     if (request.error || request.statusCode === 0) {
       // Crash animation for errors
-      const crashX = this.canvasWidth * (0.3 + Math.random() * 0.4);
-      const enterAnim = animateCarEnter(car, crashX, 1.5);
+      const progress = 0.35 + Math.random() * 0.35;
+      const crashX = car.x + (car.endX - car.x) * progress;
+      const crashY = car.y + (car.endY - car.y) * progress;
+      const enterAnim = animateCarEnter(car, crashX, crashY, 1.5);
       enterAnim.then(() => {
         animateCrash(car, this.effectsLayer);
       });
     } else {
       // Normal drive-through
-      const exitX = this.canvasWidth + 80;
       const duration = this.durationForCar(request.duration);
-      animateCarEnter(car, exitX, duration).then(() => {
-        animateCarExit(car, exitX);
+      animateCarEnter(car, car.endX, car.endY, duration).then(() => {
+        animateCarExit(car, car.endX, car.endY);
       });
     }
   }
@@ -104,17 +107,30 @@ export class HighwayScene {
     const dt = ticker.deltaTime;
     this.city.update(dt);
     this.road.update(dt);
+    for (const child of this.carLayer.children) {
+      child.zIndex = child.y;
+    }
   }
 
   private calculateLanes() {
-    const roadTop = this.canvasHeight * ROAD_TOP_RATIO;
-    const roadHeight = this.canvasHeight * ROAD_HEIGHT_RATIO;
-    const laneHeight = roadHeight / LANE_COUNT;
+    const roadWidth = this.canvasHeight * ROAD_HEIGHT_RATIO;
+    const startX = -this.canvasWidth * 0.14;
+    const endX = this.canvasWidth + this.canvasWidth * 0.1;
+    const topStartY =
+      this.canvasHeight * (ROAD_TOP_RATIO + ROAD_HEIGHT_RATIO * 0.8);
+    const topEndY =
+      this.canvasHeight * (ROAD_TOP_RATIO - ROAD_HEIGHT_RATIO * 0.35);
+    const laneHeight = roadWidth / LANE_COUNT;
 
-    this.laneYPositions = [];
+    this.lanePaths = [];
     for (let i = 0; i < LANE_COUNT; i++) {
-      // Center each lane vertically
-      this.laneYPositions.push(roadTop + laneHeight * i + laneHeight / 2);
+      const laneOffset = laneHeight * i + laneHeight / 2;
+      this.lanePaths.push({
+        startX,
+        startY: topStartY + laneOffset,
+        endX,
+        endY: topEndY + laneOffset,
+      });
     }
   }
 

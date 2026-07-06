@@ -50,6 +50,15 @@ export interface CarConfig {
   scale: number; // 0.6–1.4
   startX: number;
   startY: number;
+  endX: number;
+  endY: number;
+}
+
+export interface LanePath {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
 }
 
 // ─── Internal tracking (background only) ───

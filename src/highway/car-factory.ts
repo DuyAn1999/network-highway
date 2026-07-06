@@ -1,5 +1,5 @@
 import { Car } from "./car";
-import type { NetworkRequest, VehicleType } from "../shared/types";
+import type { LanePath, NetworkRequest, VehicleType } from "../shared/types";
 
 // ─── Classifiers: map request properties → car visual properties ───
 
@@ -47,15 +47,15 @@ export function classifyScale(responseSize: number): number {
 
 export function createCarFromRequest(
   request: NetworkRequest,
-  laneYPositions: number[]
+  lanePaths: LanePath[]
 ): Car {
   const vehicleType = classifyVehicle(request.method);
   const color = classifyColor(request.statusCode);
   const lane = classifyLane(request.duration);
   const scale = classifyScale(request.responseSize);
 
-  // Add slight random y-offset within lane so cars don't perfectly overlap
-  const laneY = laneYPositions[lane] ?? laneYPositions[0];
+  // Add slight y-offset within lane so concurrent requests do not perfectly overlap.
+  const lanePath = lanePaths[lane] ?? lanePaths[0];
   const yOffset = (Math.random() - 0.5) * 6;
 
   return new Car({
@@ -66,7 +66,9 @@ export function createCarFromRequest(
     color,
     lane,
     scale,
-    startX: -80, // start off-screen left
-    startY: laneY + yOffset,
+    startX: lanePath.startX,
+    startY: lanePath.startY + yOffset,
+    endX: lanePath.endX,
+    endY: lanePath.endY + yOffset,
   });
 }

@@ -3,15 +3,14 @@ import { Container, Graphics, Texture, Sprite } from "pixi.js";
 // ─── Synthwave color palette ───
 
 const SKY_STOPS: [number, string][] = [
-  [0.0, "#0a0015"],
-  [0.25, "#1a0030"],
-  [0.45, "#4a0040"],
-  [0.6, "#ff0060"],
-  [0.78, "#ff6600"],
-  [0.95, "#ffcc00"],
+  [0.0, "#03030b"],
+  [0.35, "#050718"],
+  [0.58, "#080a1f"],
+  [0.78, "#130820"],
+  [1.0, "#05040c"],
 ];
 
-const NEON_COLORS = [0xff00ff, 0x00ffff, 0xff0060, 0xffcc00];
+const NEON_COLORS = [0xff007a, 0x00e5ff, 0x7b1cff, 0xcaff33];
 
 // ─── Building layer configs ───
 
@@ -43,10 +42,10 @@ const LAYER_CONFIGS: BuildingLayerConfig[] = [
     maxBuildingHeight: 80,
     minBuildingWidth: 20,
     maxBuildingWidth: 50,
-    frontColor: 0x08081a,
-    topColor: 0x0e0e28,
-    sideColor: 0x0a0a22,
-    windowAlpha: 0.3,
+    frontColor: 0x050711,
+    topColor: 0x080b18,
+    sideColor: 0x060816,
+    windowAlpha: 0.22,
     windowDensity: 0.2,
     depthScale: 0.3,
   },
@@ -60,10 +59,10 @@ const LAYER_CONFIGS: BuildingLayerConfig[] = [
     maxBuildingHeight: 120,
     minBuildingWidth: 30,
     maxBuildingWidth: 70,
-    frontColor: 0x0d0d2b,
-    topColor: 0x1a1a3e,
-    sideColor: 0x141435,
-    windowAlpha: 0.6,
+    frontColor: 0x060816,
+    topColor: 0x0b1022,
+    sideColor: 0x080c1d,
+    windowAlpha: 0.45,
     windowDensity: 0.35,
     depthScale: 0.5,
   },
@@ -77,10 +76,10 @@ const LAYER_CONFIGS: BuildingLayerConfig[] = [
     maxBuildingHeight: 180,
     minBuildingWidth: 40,
     maxBuildingWidth: 90,
-    frontColor: 0x111138,
-    topColor: 0x222255,
-    sideColor: 0x1a1a44,
-    windowAlpha: 0.9,
+    frontColor: 0x070a18,
+    topColor: 0x0d1228,
+    sideColor: 0x0a0f22,
+    windowAlpha: 0.7,
     windowDensity: 0.45,
     depthScale: 0.7,
   },
@@ -115,11 +114,11 @@ export class CityBackground {
     const horizonY = height * 0.58;
     const horizonGlow = new Graphics();
     horizonGlow.rect(0, horizonY - 3, width, 6);
-    horizonGlow.fill({ color: 0xff0060, alpha: 0.5 });
+    horizonGlow.fill({ color: 0x00e5ff, alpha: 0.18 });
     container.addChild(horizonGlow);
 
     horizonGlow.rect(0, horizonY - 1, width, 2);
-    horizonGlow.fill({ color: 0xff88aa, alpha: 0.9 });
+    horizonGlow.fill({ color: 0x00e5ff, alpha: 0.55 });
     container.addChild(horizonGlow);
 
     // 5. Twinkling windows (on top of everything)
@@ -270,6 +269,23 @@ export class CityBackground {
     gfx.lineTo(x + width, y + height);
     gfx.closePath();
     gfx.fill({ color: config.sideColor });
+
+    const outlineColor =
+      NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+    const outlineAlpha = 0.18 + config.windowAlpha * 0.22;
+
+    gfx.moveTo(x, y);
+    gfx.lineTo(x + rightOffset, y - topOffset);
+    gfx.lineTo(x + width + rightOffset, y - topOffset);
+    gfx.lineTo(x + width + rightOffset, y + height - topOffset);
+    gfx.lineTo(x + width, y + height);
+    gfx.lineTo(x, y + height);
+    gfx.lineTo(x, y);
+    gfx.lineTo(x + width, y);
+    gfx.lineTo(x + width + rightOffset, y - topOffset);
+    gfx.moveTo(x + width, y);
+    gfx.lineTo(x + width, y + height);
+    gfx.stroke({ color: outlineColor, alpha: outlineAlpha, width: 1 });
 
     // Neon windows on the front face
     const windowWidth = 5;
