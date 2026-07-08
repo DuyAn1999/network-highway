@@ -4,218 +4,447 @@
   <meta charset="UTF-8" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; background: #0a0015; font-family: monospace; color: #fff; }
-    #canvas-container {
+
+    :root {
+      --bg: #050611;
+      --panel: #080b18;
+      --panel-2: #0b1020;
+      --line: rgba(71, 229, 255, 0.22);
+      --line-strong: rgba(71, 229, 255, 0.58);
+      --cyan: #5ff6ff;
+      --magenta: #ff2a73;
+      --purple: #7a28ff;
+      --lime: #dfff4a;
+      --muted: #69708c;
+      --text: #e8ecff;
+    }
+
+    html, body {
       width: 100%;
       height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "SFMono-Regular", "Cascadia Mono", "Roboto Mono", monospace;
+      letter-spacing: 0;
     }
-    /* Debug log overlay — shows until scene is ready, then hides */
-    #debug-log {
-      position: absolute;
-      top: 4px;
-      left: 4px;
-      right: 4px;
-      z-index: 1000;
-      font-size: 11px;
-      color: #00ffff;
-      pointer-events: none;
-      white-space: pre-wrap;
-      text-shadow: 0 0 4px #00ffff;
-    }
-    #debug-log.hidden { display: none; }
 
-    /* Drawer Toggle Button */
-    #dashboard-toggle {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 40px;
-      height: 40px;
-      background: rgba(255, 0, 96, 0.8);
-      border: 1px solid #ff0060;
-      border-radius: 50%;
-      z-index: 101;
-      cursor: pointer;
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px) 0 0 / 100% 4px,
+        radial-gradient(circle at 82% 28%, rgba(255, 42, 115, 0.1), transparent 32%),
+        radial-gradient(circle at 22% 78%, rgba(95, 246, 255, 0.08), transparent 30%);
+      opacity: 0.72;
+      z-index: 10;
+    }
+
+    #app-shell {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 96px 52px minmax(0, 1fr);
+      background: #03040b;
+    }
+
+    #topbar {
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      transition: all 0.3s ease;
-      box-shadow: 0 0 10px rgba(255, 0, 96, 0.5);
+      justify-content: space-between;
+      padding: 18px 22px 16px;
+      border-bottom: 1px solid var(--line-strong);
+      background: linear-gradient(180deg, #050610 0%, #03040a 100%);
     }
 
-    #dashboard-toggle:hover {
-      background: rgba(255, 0, 96, 1);
-      transform: scale(1.1);
+    #brand-title {
+      color: #f4fbff;
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 0.92;
+      font-weight: 900;
+      text-shadow: 0 0 8px rgba(95, 246, 255, 0.65);
+      white-space: nowrap;
     }
 
-    #dashboard-toggle.active {
-      background: #ff0060;
+    #brand-subtitle {
+      margin-top: 8px;
+      color: var(--purple);
+      font-size: 10px;
+      font-weight: 800;
+      text-shadow: 0 0 6px rgba(122, 40, 255, 0.7);
     }
 
-    /* Request Information Dashboard (Drawer) */
-    #request-dashboard {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 320px;
-      max-height: calc(100vh - 60px);
-      background: rgba(10, 0, 21, 0.95);
-      border: 1px solid #ff0060;
-      border-radius: 8px;
-      z-index: 100;
-      font-size: 12px;
-      overflow: hidden;
+    #status-strip {
+      min-width: min(490px, 44vw);
+      display: grid;
+      grid-template-columns: repeat(5, minmax(74px, 1fr));
+      gap: 14px;
+      padding: 10px 14px;
+      border: 1px solid rgba(95, 246, 255, 0.18);
+      background: rgba(5, 8, 18, 0.84);
+      box-shadow: inset 0 0 18px rgba(95, 246, 255, 0.025);
+    }
+
+    .status-label {
+      display: block;
+      color: #626986;
+      font-size: 9px;
+      line-height: 1;
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .status-value {
+      display: block;
+      color: var(--cyan);
+      font-size: 15px;
+      line-height: 1;
+      font-weight: 900;
+      text-shadow: 0 0 7px rgba(95, 246, 255, 0.58);
+      white-space: nowrap;
+    }
+
+    .status-value.warn { color: var(--magenta); text-shadow: 0 0 7px rgba(255, 42, 115, 0.58); }
+    .status-value.purple { color: #b444ff; text-shadow: 0 0 7px rgba(180, 68, 255, 0.58); }
+
+    #mode-tabs {
       display: flex;
-      flex-direction: column;
-      box-shadow: 0 0 20px rgba(255, 0, 96, 0.5);
-      transform: translateX(100%);
-      transition: transform 0.3s ease;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 18px 0;
+      background: #03040a;
     }
 
-    #request-dashboard.open {
-      transform: translateX(0);
+    .mode-tab {
+      height: 34px;
+      min-width: 170px;
+      padding: 0 18px;
+      border: 1px solid rgba(95, 246, 255, 0.18);
+      background: #080b17;
+      color: #cfd5e8;
+      font-size: 13px;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: inset 0 0 14px rgba(95, 246, 255, 0.02);
     }
 
-    #dashboard-header {
-      background: linear-gradient(90deg, #ff0060, #ff6600);
-      padding: 12px;
-      font-weight: bold;
-      text-align: center;
-      color: #fff;
-      text-shadow: 0 0 4px rgba(0,0,0,0.5);
+    .mode-tab.active {
+      color: var(--cyan);
+      border-color: var(--line-strong);
+      background: rgba(8, 21, 32, 0.95);
+      box-shadow: inset 0 0 18px rgba(95, 246, 255, 0.12), 0 0 14px rgba(95, 246, 255, 0.18);
+    }
+
+    #monitor-grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(290px, 24vw) minmax(0, 1fr);
+      gap: 18px;
+      padding: 16px 18px 18px;
+      background: #03040a;
+    }
+
+    #request-dashboard,
+    #stage-panel {
+      min-height: 0;
+      border: 1px solid var(--line);
+      background: rgba(8, 11, 24, 0.88);
+      box-shadow: inset 0 0 24px rgba(95, 246, 255, 0.025);
+    }
+
+    #request-dashboard {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    #dashboard-header,
+    #stage-header {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(95, 246, 255, 0.14);
+      color: #eef3ff;
+      font-size: 14px;
+      font-weight: 900;
+      background: rgba(9, 13, 27, 0.9);
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.18);
+    }
+
+    #dashboard-header::after {
+      content: "";
+      width: 40px;
+      height: 2px;
+      background: var(--cyan);
+      box-shadow: 0 0 8px rgba(95, 246, 255, 0.65);
+    }
+
+    #dashboard-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(95, 246, 255, 0.12);
+    }
+
+    #flow-filter,
+    #alarm-state {
+      height: 30px;
+      border: 1px solid rgba(95, 246, 255, 0.14);
+      background: #040711;
+      color: #6d7593;
+      font-size: 10px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+    }
+
+    #alarm-state {
+      min-width: 124px;
+      justify-content: space-between;
+      color: var(--cyan);
+    }
+
+    #flow-columns {
+      display: grid;
+      grid-template-columns: minmax(105px, 1fr) 34px 72px 66px;
+      gap: 6px;
+      padding: 10px 16px 8px;
+      border-bottom: 1px solid rgba(95, 246, 255, 0.1);
+      color: #67708b;
+      font-size: 10px;
+      font-weight: 900;
     }
 
     #request-list {
-      flex: 1;
+      min-height: 0;
       overflow-y: auto;
-      padding: 8px;
+      padding: 0 16px 12px;
     }
 
     .request-item {
-      background: rgba(26, 0, 48, 0.8);
-      border: 1px solid #4a0040;
-      border-radius: 4px;
-      padding: 8px;
-      margin-bottom: 8px;
+      min-height: 48px;
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 4px;
-      animation: fadeIn 0.3s ease-out;
+      grid-template-columns: minmax(105px, 1fr) 34px 72px 66px;
+      gap: 6px;
+      align-items: center;
+      border-bottom: 1px solid rgba(95, 246, 255, 0.07);
+      color: #dfe5f8;
+      animation: rowIn 0.22s ease-out;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateX(20px); }
+    @keyframes rowIn {
+      from { opacity: 0; transform: translateX(8px); }
       to { opacity: 1; transform: translateX(0); }
     }
 
-    .request-item.error {
-      border-color: #ff4444;
-      background: rgba(60, 0, 10, 0.8);
-    }
-
-    .request-item.success {
-      border-color: #00ff88;
+    .request-process {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .request-method {
-      background: #ff0060;
-      color: #fff;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-weight: bold;
-      font-size: 10px;
-      align-self: start;
+      justify-self: start;
+      min-width: 34px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 5px;
+      color: #061019;
+      background: var(--cyan);
+      font-size: 9px;
+      font-weight: 900;
+      flex: 0 0 auto;
     }
 
-    .request-status {
-      font-weight: bold;
-      align-self: start;
-    }
+    .request-item.error .request-method { background: var(--magenta); color: #fff; }
 
-    .request-status.success { color: #00ff88; }
-    .request-status.error { color: #ff4444; }
-
-    .request-duration {
-      color: #00ffff;
-      font-size: 11px;
-      align-self: start;
-    }
-
-    .request-url {
-      color: #88aaff;
-      font-size: 10px;
+    .request-name {
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      grid-column: span 2;
+      color: #f4f7ff;
+      font-size: 12px;
+      font-weight: 900;
     }
 
-    .request-timestamp {
-      color: #888;
-      font-size: 10px;
-      grid-column: span 2;
-      align-self: end;
-    }
-
-    #dashboard-stats {
-      padding: 8px;
-      border-top: 1px solid #4a0040;
-      display: flex;
-      justify-content: space-between;
+    .request-conns {
+      color: #9c35ff;
       font-size: 11px;
-      color: #888;
+      font-weight: 900;
+      justify-self: start;
     }
 
-    .stat-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+    .request-status {
+      color: #8befff;
+      font-size: 11px;
+      font-weight: 900;
+      justify-self: end;
+      white-space: nowrap;
     }
 
-    .stat-value {
-      color: #00ffff;
-      font-weight: bold;
+    .request-status.success { color: #8befff; }
+    .request-status.error { color: var(--magenta); }
+
+    .request-duration {
+      color: var(--cyan);
+      font-size: 10px;
+      font-weight: 900;
+      justify-self: start;
+      white-space: nowrap;
     }
 
-    /* Scrollbar styling */
-    #request-list::-webkit-scrollbar {
-      width: 6px;
+    #stage-panel {
+      display: grid;
+      grid-template-rows: 44px minmax(0, 1fr);
+      overflow: hidden;
     }
 
-    #request-list::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 3px;
+    #stage-header span {
+      color: var(--lime);
+      font-size: 10px;
+      text-shadow: 0 0 7px rgba(223, 255, 74, 0.48);
     }
 
-    #request-list::-webkit-scrollbar-thumb {
-      background: #ff0060;
-      border-radius: 3px;
+    #canvas-container {
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+      background: #02030a;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #debug-log {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      z-index: 1000;
+      font-size: 11px;
+      color: var(--cyan);
+      pointer-events: none;
+      white-space: pre-wrap;
+      text-shadow: 0 0 4px rgba(95, 246, 255, 0.8);
+    }
+
+    #debug-log.hidden { display: none; }
+
+    #dashboard-toggle {
+      display: none;
+      position: absolute;
+      top: 118px;
+      right: 14px;
+      z-index: 101;
+      width: 38px;
+      height: 34px;
+      border: 1px solid var(--line-strong);
+      background: rgba(8, 21, 32, 0.92);
+      color: var(--cyan);
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    #request-list::-webkit-scrollbar { width: 6px; }
+    #request-list::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+    #request-list::-webkit-scrollbar-thumb { background: rgba(95, 246, 255, 0.34); }
+
+    @media (max-width: 900px) {
+      #app-shell { grid-template-rows: 84px 48px minmax(0, 1fr); }
+      #topbar { padding: 14px; }
+      #status-strip { display: none; }
+      #monitor-grid { grid-template-columns: 1fr; padding: 12px; }
+      #request-dashboard {
+        position: absolute;
+        top: 144px;
+        left: 12px;
+        bottom: 12px;
+        width: min(330px, calc(100vw - 24px));
+        z-index: 80;
+        transform: translateX(calc(-100% - 18px));
+        transition: transform 0.22s ease;
+      }
+      #request-dashboard.open { transform: translateX(0); }
+      #dashboard-toggle { display: block; }
+      .mode-tab { min-width: 0; flex: 1; }
     }
   </style>
 </head>
 <body>
-  <div id="canvas-container"></div>
-  <div id="debug-log">⏳ Loading Network Highway...</div>
-  <button id="dashboard-toggle">📊</button>
-  <div id="request-dashboard">
-    <div id="dashboard-header">🚦 NETWORK REQUESTS</div>
-    <div id="request-list"></div>
-    <div id="dashboard-stats">
-      <div class="stat-item">
-        Total: <span id="stat-total" class="stat-value">0</span>
+  <div id="app-shell">
+    <header id="topbar">
+      <div id="brand">
+        <div id="brand-title">CYBER_SHIELD</div>
+        <div id="brand-subtitle">SKTOP_SYSTEM_CORE // v1.2</div>
       </div>
-      <div class="stat-item">
-        Success: <span id="stat-success" class="stat-value">0</span>
+      <div id="status-strip">
+        <div>
+          <span class="status-label">SYS_STATUS:</span>
+          <span class="status-value">ONLINE</span>
+        </div>
+        <div>
+          <span class="status-label">ADMIN_PRIV:</span>
+          <span class="status-value warn">USER(LIMITED)</span>
+        </div>
+        <div>
+          <span class="status-label">ACTIVE_FLOWS:</span>
+          <span id="stat-total" class="status-value purple">0</span>
+        </div>
+        <div>
+          <span class="status-label">DOWNLINK_TOTAL:</span>
+          <span id="stat-success" class="status-value">0KB/s</span>
+        </div>
+        <div>
+          <span class="status-label">UPLINK_TOTAL:</span>
+          <span id="stat-errors" class="status-value warn">0KB/s</span>
+        </div>
       </div>
-      <div class="stat-item">
-        Errors: <span id="stat-errors" class="stat-value">0</span>
-      </div>
-    </div>
+    </header>
+
+    <nav id="mode-tabs" aria-label="Monitor modes">
+      <div class="mode-tab active">// REALTIME_GRID</div>
+      <div class="mode-tab">/\ ARCHIVE_CORE</div>
+    </nav>
+
+    <main id="monitor-grid">
+      <aside id="request-dashboard" class="open">
+        <div id="dashboard-header">ACTIVE_DATA_FLOWS</div>
+        <div id="dashboard-controls">
+          <div id="flow-filter">FILTER BY PROCESS_NAME...</div>
+          <div id="alarm-state"><span>ALARM AT:</span><strong>DISABLED</strong></div>
+        </div>
+        <div id="flow-columns">
+          <span>PROCESS_NAME</span>
+          <span>CONNS</span>
+          <span>SPEED D/U</span>
+          <span>FIREWALL</span>
+        </div>
+        <div id="request-list"></div>
+      </aside>
+
+      <section id="stage-panel">
+        <div id="stage-header">DATA_GRID_HIGHWAY // PERSPECTIVE_VIEW <span>60 FPS</span></div>
+        <div id="canvas-container"></div>
+      </section>
+    </main>
   </div>
+
+  <div id="debug-log">Loading Network Highway...</div>
+  <button id="dashboard-toggle" aria-label="Toggle data flows">//</button>
   <script type="module" src="./panel.tsx"></script>
 </body>
 </html>

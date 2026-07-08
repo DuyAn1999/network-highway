@@ -12,6 +12,7 @@ export interface NetworkRequest {
   type: string; // chrome.webRequest.ResourceType
   fromCache?: boolean;
   error?: string;
+  previewProgress?: number;
 }
 
 // ─── Message types (background ↔ devtools ↔ panel) ───

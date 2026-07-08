@@ -2,6 +2,7 @@ import { Application, Container, Ticker } from "pixi.js";
 import type { LanePath, NetworkRequest } from "../shared/types";
 import { CityBackground } from "./city-background";
 import { HighwayRoad } from "./highway-road";
+import { createRoadGeometry } from "./road-model";
 import { createCarFromRequest } from "./car-factory";
 import 'pixi.js/unsafe-eval';
 import { animateCarEnter, animateCrash, animateCarExit } from "./animations";
@@ -11,6 +12,7 @@ import { animateCarEnter, animateCrash, animateCarExit } from "./animations";
 const ROAD_TOP_RATIO = 0.58;
 const ROAD_HEIGHT_RATIO = 0.22;
 const LANE_COUNT = 3;
+const MIN_SPAWN_GAP_MS = 360;
 
 export class HighwayScene {
   private app!: Application;
@@ -23,6 +25,7 @@ export class HighwayScene {
   private road!: HighwayRoad;
 
   private lanePaths: LanePath[] = [];
+  private nextLaneSpawnAt = Array.from({ length: LANE_COUNT }, () => 0);
   private canvasWidth = 0;
   private canvasHeight = 0;
 
@@ -81,7 +84,32 @@ export class HighwayScene {
   addRequest(request: NetworkRequest) {
     if (this.lanePaths.length === 0) return;
 
+    const lane = this.laneForRequest(request);
+    const now = performance.now();
+    const spawnAt = Math.max(now, this.nextLaneSpawnAt[lane] ?? now);
+    this.nextLaneSpawnAt[lane] = spawnAt + MIN_SPAWN_GAP_MS;
+
+    window.setTimeout(() => {
+      this.spawnRequestCar(request);
+    }, spawnAt - now);
+  }
+
+  private spawnRequestCar(request: NetworkRequest) {
+    if (this.lanePaths.length === 0) return;
+
     const car = createCarFromRequest(request, this.lanePaths);
+    const previewProgress = request.previewProgress ?? 0;
+    if (previewProgress > 0) {
+      const lanePath = this.lanePaths[car.lane] ?? this.lanePaths[0];
+      car.position.set(
+        this.lerp(lanePath.startX, lanePath.endX, previewProgress),
+        this.lerp(lanePath.startY, lanePath.endY, previewProgress)
+      );
+      car.alpha = 1;
+      const progressScale =
+        car.baseScale * (0.82 + (1.08 - 0.82) * previewProgress);
+      car.scale.set(progressScale);
+    }
     car.zIndex = car.y;
     this.carLayer.addChild(car);
 
@@ -96,7 +124,8 @@ export class HighwayScene {
       });
     } else {
       // Normal drive-through
-      const duration = this.durationForCar(request.duration);
+      const duration =
+        this.durationForCar(request.duration) * (1 - previewProgress * 0.75);
       animateCarEnter(car, car.endX, car.endY, duration).then(() => {
         animateCarExit(car, car.endX, car.endY);
       });
@@ -113,32 +142,28 @@ export class HighwayScene {
   }
 
   private calculateLanes() {
-    const roadWidth = this.canvasHeight * ROAD_HEIGHT_RATIO;
-    const startX = -this.canvasWidth * 0.14;
-    const endX = this.canvasWidth + this.canvasWidth * 0.1;
-    const topStartY =
-      this.canvasHeight * (ROAD_TOP_RATIO + ROAD_HEIGHT_RATIO * 0.8);
-    const topEndY =
-      this.canvasHeight * (ROAD_TOP_RATIO - ROAD_HEIGHT_RATIO * 0.35);
-    const laneHeight = roadWidth / LANE_COUNT;
+    this.lanePaths = createRoadGeometry(
+      this.canvasWidth,
+      this.canvasHeight,
+      LANE_COUNT
+    ).lanePaths;
+  }
 
-    this.lanePaths = [];
-    for (let i = 0; i < LANE_COUNT; i++) {
-      const laneOffset = laneHeight * i + laneHeight / 2;
-      this.lanePaths.push({
-        startX,
-        startY: topStartY + laneOffset,
-        endX,
-        endY: topEndY + laneOffset,
-      });
-    }
+  private laneForRequest(request: NetworkRequest): number {
+    if (request.duration < 100) return 0;
+    if (request.duration < 500) return 1;
+    return 2;
+  }
+
+  private lerp(a: number, b: number, t: number) {
+    return a + (b - a) * t;
   }
 
   private durationForCar(requestDuration: number): number {
     // Map network latency to animation duration
-    // Fast requests (<100ms) → 3s animation, slow (>500ms) → 1.5s
+    // Fast requests stay visible longer; slow requests still move through briskly.
     const clamped = Math.min(Math.max(requestDuration, 50), 2000);
-    return 3 - (clamped / 2000) * 1.5;
+    return 5 - (clamped / 2000) * 2;
   }
 
   private rebuildScene() {

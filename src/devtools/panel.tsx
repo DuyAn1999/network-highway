@@ -80,11 +80,13 @@ async function main() {
 
 function startPreviewTraffic(scene: HighwayScene) {
   const samples: NetworkRequest[] = [
-    makePreviewRequest("GET", 200, 72, 820),
-    makePreviewRequest("POST", 201, 230, 140000),
-    makePreviewRequest("DELETE", 500, 640, 2400, "Preview failure"),
-    makePreviewRequest("PATCH", 302, 410, 76000),
-    makePreviewRequest("GET", 404, 180, 1200),
+    makePreviewRequest("GET", 200, 72, 820, undefined, 0.78),
+    makePreviewRequest("POST", 201, 230, 140000, undefined, 0.62),
+    makePreviewRequest("PATCH", 302, 410, 76000, undefined, 0.48),
+    makePreviewRequest("GET", 200, 130, 4200, undefined, 0.34),
+    makePreviewRequest("POST", 201, 320, 220000, undefined, 0.18),
+    makePreviewRequest("DELETE", 500, 640, 2400, "Preview failure", 0.56),
+    makePreviewRequest("GET", 404, 180, 1200, undefined, 0.26),
   ];
 
   let index = 0;
@@ -95,10 +97,10 @@ function startPreviewTraffic(scene: HighwayScene) {
     index++;
   };
 
-  for (let i = 0; i < 6; i++) {
-    setTimeout(spawn, i * 550);
+  for (let i = 0; i < 16; i++) {
+    setTimeout(spawn, i * 260);
   }
-  setInterval(spawn, 1200);
+  setInterval(spawn, 520);
 }
 
 function makePreviewRequest(
@@ -106,7 +108,8 @@ function makePreviewRequest(
   statusCode: number,
   duration: number,
   responseSize: number,
-  error?: string
+  error?: string,
+  previewProgress?: number
 ): NetworkRequest {
   return {
     requestId: `preview-${method}-${statusCode}`,
@@ -119,6 +122,7 @@ function makePreviewRequest(
     tabId: 0,
     type: "xmlhttprequest",
     error,
+    previewProgress,
   };
 }
 
@@ -192,45 +196,64 @@ function createRequestItem(request: NetworkRequest): HTMLElement {
 
   div.className = `request-item ${isError ? 'error' : 'success'}`;
 
-  // Method badge
+  // Process / route cell
+  const process = document.createElement("span");
+  process.className = "request-process";
+
   const method = document.createElement("span");
   method.className = "request-method";
   method.textContent = request.method;
 
-  // Status
+  const name = document.createElement("span");
+  name.className = "request-name";
+  name.textContent = requestDisplayName(request);
+
+  process.appendChild(method);
+  process.appendChild(name);
+
+  const conns = document.createElement("span");
+  conns.className = "request-conns";
+  conns.textContent = String(Math.max(1, Math.min(99, Math.round(request.duration / 80))));
+
+  const speed = document.createElement("span");
+  speed.className = "request-duration";
+  speed.textContent = formatRate(request.responseSize, request.duration);
+
   const status = document.createElement("span");
   status.className = `request-status ${isError ? 'error' : 'success'}`;
-  status.textContent = isError ? "❌ FAILED" : "✅ SUCCESS";
+  status.textContent = isError ? "[BLOCK]" : "[ALLOW]";
 
-  // Duration
-  const duration = document.createElement("span");
-  duration.className = "request-duration";
-  duration.textContent = `${request.duration.toFixed(0)}ms`;
-
-  // URL
-  const url = document.createElement("span");
-  url.className = "request-url";
-  url.textContent = request.url;
-
-  // Timestamp
-  const timestamp = document.createElement("span");
-  timestamp.className = "request-timestamp";
-  const date = new Date(request.startTime);
-  timestamp.textContent = date.toLocaleTimeString();
-
-  div.appendChild(method);
+  div.title = request.url;
+  div.appendChild(process);
+  div.appendChild(conns);
+  div.appendChild(speed);
   div.appendChild(status);
-  div.appendChild(duration);
-  div.appendChild(url);
-  div.appendChild(timestamp);
 
   return div;
 }
 
+function requestDisplayName(request: NetworkRequest): string {
+  try {
+    const url = new URL(request.url);
+    const pathName = url.pathname.split("/").filter(Boolean).join("/");
+    return pathName || url.hostname;
+  } catch {
+    return request.url;
+  }
+}
+
+function formatRate(bytes: number, durationMs: number): string {
+  const seconds = Math.max(durationMs / 1000, 0.05);
+  const kbps = bytes / 1024 / seconds;
+  if (kbps >= 1000) return `${(kbps / 1024).toFixed(1)} MB/s`;
+  if (kbps >= 10) return `${kbps.toFixed(0)} KB/s`;
+  return `${kbps.toFixed(1)} KB/s`;
+}
+
 function updateStats() {
   statTotal.textContent = totalRequests.toString();
-  statSuccess.textContent = successRequests.toString();
-  statErrors.textContent = errorRequests.toString();
+  statSuccess.textContent = `${Math.max(1, successRequests * 7)}KB/s`;
+  statErrors.textContent = `${Math.max(0, errorRequests * 143)}KB/s`;
 }
 
 main().catch((err) => {

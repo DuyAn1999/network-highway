@@ -1,153 +1,159 @@
-import { Container, Graphics, Texture, Sprite } from "pixi.js";
-
-// ─── Synthwave color palette ───
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
+import {
+  createRoadGeometry,
+  lerpPoint,
+  type Point2D,
+  type RoadGeometry,
+} from "./road-model";
 
 const SKY_STOPS: [number, string][] = [
-  [0.0, "#03030b"],
-  [0.35, "#050718"],
-  [0.58, "#080a1f"],
-  [0.78, "#130820"],
-  [1.0, "#05040c"],
+  [0, "#02030a"],
+  [0.34, "#040616"],
+  [0.62, "#060817"],
+  [0.82, "#05040d"],
+  [1, "#020208"],
 ];
 
-const NEON_COLORS = [0xff007a, 0x00e5ff, 0x7b1cff, 0xcaff33];
+const NEON_COLORS = [0x00e5ff, 0xff007a, 0x6a18ff, 0xcaff33, 0x1df7a0];
 
-// ─── Building layer configs ───
-
-interface BuildingLayerConfig {
-  yStartRatio: number; // where buildings start (fraction of height)
-  yEndRatio: number; // where buildings end
-  minBuildings: number;
-  maxBuildings: number;
-  minBuildingHeight: number;
-  maxBuildingHeight: number;
-  minBuildingWidth: number;
-  maxBuildingWidth: number;
+interface BuildingStyle {
+  minWidth: number;
+  maxWidth: number;
+  minHeight: number;
+  maxHeight: number;
   frontColor: number;
-  topColor: number;
   sideColor: number;
-  windowAlpha: number; // brightness of windows
-  windowDensity: number; // probability a window slot is lit
-  depthScale: number; // isometric depth offset multiplier
+  topColor: number;
+  depthScale: number;
+  fillAlpha: number;
+  outlineAlpha: number;
+  windowAlpha: number;
+  windowDensity: number;
 }
 
-const LAYER_CONFIGS: BuildingLayerConfig[] = [
-  {
-    // Far layer — small, dark silhouettes
-    yStartRatio: 0.30,
-    yEndRatio: 0.50,
-    minBuildings: 12,
-    maxBuildings: 18,
-    minBuildingHeight: 30,
-    maxBuildingHeight: 80,
-    minBuildingWidth: 20,
-    maxBuildingWidth: 50,
-    frontColor: 0x050711,
-    topColor: 0x080b18,
-    sideColor: 0x060816,
-    windowAlpha: 0.22,
-    windowDensity: 0.2,
-    depthScale: 0.3,
-  },
-  {
-    // Mid layer — medium, some neon
-    yStartRatio: 0.35,
-    yEndRatio: 0.55,
-    minBuildings: 8,
-    maxBuildings: 14,
-    minBuildingHeight: 50,
-    maxBuildingHeight: 120,
-    minBuildingWidth: 30,
-    maxBuildingWidth: 70,
-    frontColor: 0x060816,
-    topColor: 0x0b1022,
-    sideColor: 0x080c1d,
-    windowAlpha: 0.45,
-    windowDensity: 0.35,
-    depthScale: 0.5,
-  },
-  {
-    // Near layer — tall, bright neon
-    yStartRatio: 0.38,
-    yEndRatio: 0.60,
-    minBuildings: 6,
-    maxBuildings: 10,
-    minBuildingHeight: 80,
-    maxBuildingHeight: 180,
-    minBuildingWidth: 40,
-    maxBuildingWidth: 90,
-    frontColor: 0x070a18,
-    topColor: 0x0d1228,
-    sideColor: 0x0a0f22,
-    windowAlpha: 0.7,
-    windowDensity: 0.45,
-    depthScale: 0.7,
-  },
-];
+interface TowerSpec {
+  base: Point2D;
+  width: number;
+  height: number;
+  style: BuildingStyle;
+  accentColor: number;
+}
+
+const FAR_STYLE: BuildingStyle = {
+  minWidth: 26,
+  maxWidth: 62,
+  minHeight: 72,
+  maxHeight: 260,
+  frontColor: 0x04060f,
+  sideColor: 0x03050d,
+  topColor: 0x070a16,
+  depthScale: 0.48,
+  fillAlpha: 0.78,
+  outlineAlpha: 0.14,
+  windowAlpha: 0.24,
+  windowDensity: 0.2,
+};
+
+const MID_STYLE: BuildingStyle = {
+  minWidth: 34,
+  maxWidth: 78,
+  minHeight: 96,
+  maxHeight: 300,
+  frontColor: 0x050711,
+  sideColor: 0x040713,
+  topColor: 0x0a0d1d,
+  depthScale: 0.54,
+  fillAlpha: 0.84,
+  outlineAlpha: 0.24,
+  windowAlpha: 0.36,
+  windowDensity: 0.27,
+};
+
+const NEAR_STYLE: BuildingStyle = {
+  minWidth: 42,
+  maxWidth: 94,
+  minHeight: 105,
+  maxHeight: 330,
+  frontColor: 0x060813,
+  sideColor: 0x050712,
+  topColor: 0x0c1021,
+  depthScale: 0.6,
+  fillAlpha: 0.9,
+  outlineAlpha: 0.34,
+  windowAlpha: 0.48,
+  windowDensity: 0.32,
+};
 
 export class CityBackground {
-  private stars: { graphic: Graphics; baseAlpha: number; speed: number }[] = [];
-  private windows: { graphic: Graphics; baseAlpha: number; flickerRate: number }[] = [];
-  private starContainer = new Container();
-  private windowContainer = new Container();
+  private particles: { graphic: Graphics; speed: number; wrapY: number }[] = [];
+  private flickers: { graphic: Graphics; baseAlpha: number; flickerRate: number }[] = [];
+  private particleContainer = new Container();
+  private flickerContainer = new Container();
   private frameCount = 0;
+  private seed = 1;
 
   build(container: Container, width: number, height: number) {
-    // 1. Sky gradient
-    const skyTexture = this.createGradientTexture(width, height * 0.62);
+    this.reset(width, height);
+
+    const road = createRoadGeometry(width, height, 3);
+    const skyTexture = this.createGradientTexture(width, height);
     const skySprite = new Sprite(skyTexture);
-    skySprite.position.set(0, 0);
     container.addChild(skySprite);
 
-    // 2. Star field
-    this.createStars(this.starContainer, width, height);
-    container.addChild(this.starContainer);
+    const floor = new Graphics();
+    this.drawDataFloor(floor, width, height, road);
+    container.addChild(floor);
 
-    // 3. Building layers (far → near)
-    for (const config of LAYER_CONFIGS) {
-      const layerGfx = new Graphics();
-      this.drawBuildingLayer(layerGfx, width, height, config);
-      container.addChild(layerGfx);
-    }
+    this.createDataParticles(this.particleContainer, width, height);
+    container.addChild(this.particleContainer);
 
-    // 4. Neon sign strip at horizon
-    const horizonY = height * 0.58;
-    const horizonGlow = new Graphics();
-    horizonGlow.rect(0, horizonY - 3, width, 6);
-    horizonGlow.fill({ color: 0x00e5ff, alpha: 0.18 });
-    container.addChild(horizonGlow);
+    const farCity = new Graphics();
+    this.drawDistantDistrict(farCity, width, height);
+    container.addChild(farCity);
 
-    horizonGlow.rect(0, horizonY - 1, width, 2);
-    horizonGlow.fill({ color: 0x00e5ff, alpha: 0.55 });
-    container.addChild(horizonGlow);
+    const upperCity = new Graphics();
+    this.drawRoadsideDistrict(upperCity, road, "upper", MID_STYLE, 24, 0.02, 0.98);
+    container.addChild(upperCity);
 
-    // 5. Twinkling windows (on top of everything)
-    container.addChild(this.windowContainer);
+    const lowerCity = new Graphics();
+    this.drawRoadsideDistrict(lowerCity, road, "lower", NEAR_STYLE, 18, 0.04, 0.9);
+    container.addChild(lowerCity);
+
+    const haze = new Graphics();
+    this.drawHorizonHaze(haze, width, height);
+    container.addChild(haze);
+
+    container.addChild(this.flickerContainer);
   }
 
   update(dt: number) {
     this.frameCount++;
 
-    // Twinkle windows every 4th frame
-    if (this.frameCount % 4 === 0) {
-      for (const w of this.windows) {
-        if (Math.random() < w.flickerRate) {
-          w.graphic.alpha = w.baseAlpha * (0.5 + Math.random() * 0.5);
-        }
+    for (const particle of this.particles) {
+      particle.graphic.y += particle.speed * dt;
+      if (particle.graphic.y > particle.wrapY) {
+        particle.graphic.y = -8;
       }
     }
 
-    // Drift stars slowly
-    for (const star of this.stars) {
-      star.graphic.y += star.speed * dt;
-      if (star.graphic.y > 400) {
-        star.graphic.y = 0;
-        star.graphic.x = Math.random() * 2000;
+    if (this.frameCount % 5 !== 0) return;
+
+    for (const flicker of this.flickers) {
+      if (this.rand() < flicker.flickerRate) {
+        flicker.graphic.alpha = flicker.baseAlpha * (0.48 + this.rand() * 0.52);
       }
     }
   }
 
-  // ─── Sky gradient (offscreen canvas → Texture) ───
+  private reset(width: number, height: number) {
+    this.particles = [];
+    this.flickers = [];
+    this.particleContainer.removeChildren();
+    this.flickerContainer.removeChildren();
+    this.frameCount = 0;
+    this.seed = (Math.floor(width) * 73856093) ^ (Math.floor(height) * 19349663) ^ 0x9e3779b9;
+    this.seed >>>= 0;
+  }
 
   private createGradientTexture(width: number, height: number): Texture {
     const canvas = document.createElement("canvas");
@@ -159,174 +165,302 @@ export class CityBackground {
     for (const [offset, color] of SKY_STOPS) {
       gradient.addColorStop(offset, color);
     }
-
     ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const sideGlow = ctx.createRadialGradient(
+      canvas.width * 0.85,
+      canvas.height * 0.48,
+      0,
+      canvas.width * 0.85,
+      canvas.height * 0.48,
+      canvas.width * 0.62
+    );
+    sideGlow.addColorStop(0, "rgba(0, 229, 255, 0.08)");
+    sideGlow.addColorStop(0.38, "rgba(255, 0, 122, 0.035)");
+    sideGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = sideGlow;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     return Texture.from(canvas);
   }
 
-  // ─── Star field ───
+  private drawDataFloor(gfx: Graphics, width: number, height: number, road: RoadGeometry) {
+    const horizonY = height * 0.28;
 
-  private createStars(container: Container, width: number, height: number) {
-    const starCount = 60;
-    const starGfx = new Graphics();
+    for (let y = horizonY; y < height * 1.08; y += 54) {
+      gfx.moveTo(-width * 0.08, y);
+      gfx.lineTo(width * 1.08, y - height * 0.22);
+      gfx.stroke({ color: 0x09253a, alpha: 0.12, width: 1 });
+    }
 
-    for (let i = 0; i < starCount; i++) {
-      const x = Math.random() * width;
-      const y = Math.random() * height * 0.5;
-      const radius = 0.5 + Math.random() * 1.5;
-      const alpha = 0.3 + Math.random() * 0.7;
+    for (let offset = -width * 0.55; offset < width * 1.2; offset += 92) {
+      const start = {
+        x: offset,
+        y: height * 1.04,
+      };
+      const end = {
+        x: offset + width * 0.46,
+        y: horizonY,
+      };
+      gfx.moveTo(start.x, start.y);
+      gfx.lineTo(end.x, end.y);
+      gfx.stroke({ color: 0x2e0f4f, alpha: 0.1, width: 1 });
+    }
 
-      starGfx.circle(x, y, radius);
-      starGfx.fill({ color: 0xffffff, alpha });
+    const upperA = lerpPoint(road.upperStart, road.upperEnd, 0.03);
+    const upperB = lerpPoint(road.upperStart, road.upperEnd, 0.98);
+    gfx.moveTo(upperA.x, upperA.y - 70);
+    gfx.lineTo(upperB.x, upperB.y - 48);
+    gfx.stroke({ color: 0x00e5ff, alpha: 0.08, width: 7 });
+  }
 
-      this.stars.push({
-        graphic: starGfx,
-        baseAlpha: alpha,
-        speed: 0.02 + Math.random() * 0.05,
+  private createDataParticles(container: Container, width: number, height: number) {
+    const count = Math.max(28, Math.floor(width / 28));
+
+    for (let i = 0; i < count; i++) {
+      const particle = new Graphics();
+      const color = this.rand() < 0.62 ? 0x00e5ff : 0xff007a;
+      const size = 0.7 + this.rand() * 1.6;
+      particle.circle(0, 0, size);
+      particle.fill({ color, alpha: 0.16 + this.rand() * 0.2 });
+      particle.position.set(this.rand() * width, this.rand() * height * 0.72);
+      container.addChild(particle);
+      this.particles.push({
+        graphic: particle,
+        speed: 0.018 + this.rand() * 0.04,
+        wrapY: height * 0.74,
       });
     }
-
-    container.addChild(starGfx);
   }
 
-  // ─── Procedural isometric buildings ───
+  private drawDistantDistrict(gfx: Graphics, width: number, height: number) {
+    const specs: TowerSpec[] = [];
+    const rows = [
+      { count: Math.max(9, Math.floor(width / 150)), baseY: height * 0.52, style: FAR_STYLE },
+      { count: Math.max(11, Math.floor(width / 125)), baseY: height * 0.64, style: MID_STYLE },
+    ];
 
-  private drawBuildingLayer(
-    gfx: Graphics,
-    canvasWidth: number,
-    canvasHeight: number,
-    config: BuildingLayerConfig
-  ) {
-    const yStart = canvasHeight * config.yStartRatio;
-    const yEnd = canvasHeight * config.yEndRatio;
+    for (const row of rows) {
+      for (let i = 0; i < row.count; i++) {
+        const t = row.count === 1 ? 0.5 : i / (row.count - 1);
+        const x = width * (-0.02 + t * 1.08) + this.between(-30, 30);
+        const baseY = row.baseY + this.between(-34, 36);
+        const scale = row.baseY < height * 0.56 ? 0.72 : 0.9;
+        specs.push(this.createTowerSpec({ x, y: baseY }, row.style, scale));
+      }
+    }
 
-    const buildingCount =
-      config.minBuildings +
-      Math.floor(
-        Math.random() * (config.maxBuildings - config.minBuildings + 1)
-      );
-
-    // Distribute buildings across the width
-    const gapMin = 2;
-    const gapMax = 8;
-    const totalGap = gapMin * (buildingCount + 1);
-    const availableWidth = canvasWidth - totalGap;
-    let xCursor = gapMin;
-
-    for (let i = 0; i < buildingCount; i++) {
-      const bWidth =
-        config.minBuildingWidth +
-        Math.random() * (config.maxBuildingWidth - config.minBuildingWidth);
-      const bHeight =
-        config.minBuildingHeight +
-        Math.random() * (config.maxBuildingHeight - config.minBuildingHeight);
-
-      // Buildings sit on the ground line (yEnd), extending upward
-      const bX = xCursor;
-      const bY = yEnd - bHeight;
-
-      this.drawIsometricBuilding(gfx, bX, bY, bWidth, bHeight, config);
-
-      // Random gap between buildings
-      const gap = gapMin + Math.random() * (gapMax - gapMin);
-      xCursor += bWidth + gap;
-
-      // If we've gone past the width, wrap or stop
-      if (xCursor > canvasWidth + 50) break;
+    specs.sort((a, b) => a.base.y - b.base.y);
+    for (const spec of specs) {
+      this.drawTower(gfx, spec);
     }
   }
 
-  private drawIsometricBuilding(
+  private drawRoadsideDistrict(
+    gfx: Graphics,
+    road: RoadGeometry,
+    side: "upper" | "lower",
+    style: BuildingStyle,
+    count: number,
+    progressStart: number,
+    progressEnd: number
+  ) {
+    const specs: TowerSpec[] = [];
+    const edgeStart = side === "upper" ? road.upperStart : road.lowerStart;
+    const edgeEnd = side === "upper" ? road.upperEnd : road.lowerEnd;
+    const sideSign = side === "upper" ? -1 : 1;
+
+    for (let i = 0; i < count; i++) {
+      const tBase = count === 1 ? 0.5 : i / (count - 1);
+      const progress = progressStart + (progressEnd - progressStart) * tBase + this.between(-0.025, 0.025);
+      const edge = lerpPoint(edgeStart, edgeEnd, progress);
+      const nearScale = 1.18 - progress * 0.48;
+      const districtDepth = side === "upper" ? this.between(70, 275) : this.between(54, 170);
+      const base = {
+        x: edge.x + road.normal.x * sideSign * districtDepth + this.between(-18, 18),
+        y: edge.y + road.normal.y * sideSign * districtDepth + this.between(-16, 18),
+      };
+
+      specs.push(this.createTowerSpec(base, style, nearScale));
+
+      if (this.rand() < 0.38) {
+        const secondBase = {
+          x: base.x + road.normal.x * sideSign * this.between(42, 96) + this.between(-12, 12),
+          y: base.y + road.normal.y * sideSign * this.between(42, 96) + this.between(-12, 12),
+        };
+        specs.push(this.createTowerSpec(secondBase, side === "upper" ? FAR_STYLE : MID_STYLE, nearScale * 0.78));
+      }
+    }
+
+    specs.sort((a, b) => a.base.y - b.base.y);
+    for (const spec of specs) {
+      this.drawTower(gfx, spec);
+    }
+  }
+
+  private createTowerSpec(base: Point2D, style: BuildingStyle, scale: number): TowerSpec {
+    const width = this.between(style.minWidth, style.maxWidth) * scale;
+    const height = this.between(style.minHeight, style.maxHeight) * scale;
+
+    return {
+      base,
+      width,
+      height,
+      style,
+      accentColor: NEON_COLORS[Math.floor(this.rand() * NEON_COLORS.length)],
+    };
+  }
+
+  private drawTower(gfx: Graphics, spec: TowerSpec) {
+    const { base, width, height, style, accentColor } = spec;
+    const x = base.x - width * 0.5;
+    const y = base.y - height;
+    const depthX = width * style.depthScale;
+    const depthY = -width * style.depthScale * 0.46;
+
+    gfx.rect(x, y, width, height);
+    gfx.fill({ color: style.frontColor, alpha: style.fillAlpha });
+
+    gfx.moveTo(x + width, y);
+    gfx.lineTo(x + width + depthX, y + depthY);
+    gfx.lineTo(x + width + depthX, y + height + depthY);
+    gfx.lineTo(x + width, y + height);
+    gfx.closePath();
+    gfx.fill({ color: style.sideColor, alpha: style.fillAlpha * 0.92 });
+
+    gfx.moveTo(x, y);
+    gfx.lineTo(x + depthX, y + depthY);
+    gfx.lineTo(x + width + depthX, y + depthY);
+    gfx.lineTo(x + width, y);
+    gfx.closePath();
+    gfx.fill({ color: style.topColor, alpha: style.fillAlpha });
+
+    this.drawTowerOutline(gfx, x, y, width, height, depthX, depthY, accentColor, style.outlineAlpha);
+    this.drawTowerWindows(gfx, x, y, width, height, style, accentColor);
+    this.drawTowerDetails(gfx, x, y, width, height, depthX, depthY, style, accentColor);
+  }
+
+  private drawTowerOutline(
     gfx: Graphics,
     x: number,
     y: number,
     width: number,
     height: number,
-    config: BuildingLayerConfig
+    depthX: number,
+    depthY: number,
+    color: number,
+    alpha: number
   ) {
-    const depth = width * config.depthScale;
-    const topOffset = depth * 0.5;
-    const rightOffset = depth * 0.7;
-
-    // Front face (darkest)
-    gfx.rect(x, y, width, height);
-    gfx.fill({ color: config.frontColor });
-
-    // Top face (parallelogram, lighter)
     gfx.moveTo(x, y);
-    gfx.lineTo(x + rightOffset, y - topOffset);
-    gfx.lineTo(x + width + rightOffset, y - topOffset);
-    gfx.lineTo(x + width, y);
-    gfx.closePath();
-    gfx.fill({ color: config.topColor });
-
-    // Right side face (medium)
-    gfx.moveTo(x + width, y);
-    gfx.lineTo(x + width + rightOffset, y - topOffset);
-    gfx.lineTo(x + width + rightOffset, y + height - topOffset);
-    gfx.lineTo(x + width, y + height);
-    gfx.closePath();
-    gfx.fill({ color: config.sideColor });
-
-    const outlineColor =
-      NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
-    const outlineAlpha = 0.18 + config.windowAlpha * 0.22;
-
-    gfx.moveTo(x, y);
-    gfx.lineTo(x + rightOffset, y - topOffset);
-    gfx.lineTo(x + width + rightOffset, y - topOffset);
-    gfx.lineTo(x + width + rightOffset, y + height - topOffset);
+    gfx.lineTo(x + depthX, y + depthY);
+    gfx.lineTo(x + width + depthX, y + depthY);
+    gfx.lineTo(x + width + depthX, y + height + depthY);
     gfx.lineTo(x + width, y + height);
     gfx.lineTo(x, y + height);
     gfx.lineTo(x, y);
     gfx.lineTo(x + width, y);
-    gfx.lineTo(x + width + rightOffset, y - topOffset);
+    gfx.lineTo(x + width + depthX, y + depthY);
     gfx.moveTo(x + width, y);
     gfx.lineTo(x + width, y + height);
-    gfx.stroke({ color: outlineColor, alpha: outlineAlpha, width: 1 });
+    gfx.stroke({ color, alpha, width: 1 });
 
-    // Neon windows on the front face
-    const windowWidth = 5;
-    const windowHeight = 7;
-    const hSpacing = 11;
-    const vSpacing = 13;
-    const padding = 6;
+    gfx.moveTo(x + 1, y + height);
+    gfx.lineTo(x + width + 1, y + height);
+    gfx.stroke({ color, alpha: alpha * 0.45, width: 2 });
+  }
 
-    for (let wy = y + padding; wy < y + height - padding; wy += vSpacing) {
-      for (let wx = x + padding; wx < x + width - padding; wx += hSpacing) {
-        if (Math.random() < config.windowDensity) {
-          const neonColor =
-            NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
-          const alpha = config.windowAlpha * (0.6 + Math.random() * 0.4);
+  private drawTowerWindows(
+    gfx: Graphics,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    style: BuildingStyle,
+    accentColor: number
+  ) {
+    const windowW = Math.max(2, Math.min(4, width * 0.075));
+    const windowH = Math.max(3, Math.min(7, height * 0.035));
+    const gapX = Math.max(8, width * 0.2);
+    const gapY = Math.max(12, height * 0.085);
+    const padX = Math.max(6, width * 0.12);
+    const padY = Math.max(8, height * 0.08);
 
-          gfx.rect(wx, wy, windowWidth, windowHeight);
-          gfx.fill({ color: neonColor, alpha });
+    for (let wy = y + padY; wy < y + height - padY; wy += gapY) {
+      for (let wx = x + padX; wx < x + width - padX; wx += gapX) {
+        if (this.rand() > style.windowDensity) continue;
 
-          // Track for twinkling
-          this.windows.push({
-            graphic: gfx,
-            baseAlpha: alpha,
-            flickerRate: 0.01 + Math.random() * 0.03,
-          });
+        const color = this.rand() < 0.7 ? accentColor : 0x00e5ff;
+        const alpha = style.windowAlpha * (0.48 + this.rand() * 0.52);
+        gfx.rect(wx, wy, windowW, windowH);
+        gfx.fill({ color, alpha });
+
+        if (this.rand() < 0.045) {
+          this.addFlicker(wx, wy, windowW, windowH, color, alpha);
         }
       }
     }
+  }
 
-    // Occasional neon sign strip on near buildings
-    if (config.depthScale > 0.5 && Math.random() < 0.3) {
-      const signColor =
-        NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
-      const signY = y + Math.random() * (height * 0.4);
-      const signHeight = 3;
-
-      // Glow layer
-      gfx.rect(x - 1, signY - 2, width + 2, signHeight + 4);
-      gfx.fill({ color: signColor, alpha: 0.15 });
-      // Bright layer
-      gfx.rect(x, signY, width, signHeight);
-      gfx.fill({ color: signColor, alpha: 0.7 });
+  private drawTowerDetails(
+    gfx: Graphics,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    depthX: number,
+    depthY: number,
+    style: BuildingStyle,
+    accentColor: number
+  ) {
+    if (height > style.maxHeight * 0.62 && this.rand() < 0.7) {
+      const antennaX = x + width * (0.48 + this.between(-0.12, 0.12)) + depthX * 0.35;
+      const antennaY = y + depthY * 0.55;
+      gfx.moveTo(antennaX, antennaY);
+      gfx.lineTo(antennaX, antennaY - this.between(10, 22));
+      gfx.stroke({ color: accentColor, alpha: style.outlineAlpha * 0.75, width: 1 });
+      gfx.circle(antennaX, antennaY - 1, 2);
+      gfx.fill({ color: 0xff2a5f, alpha: 0.48 });
     }
+
+    if (this.rand() < 0.24) {
+      const signY = y + this.between(height * 0.18, height * 0.58);
+      gfx.rect(x + 2, signY, width - 4, 2);
+      gfx.fill({ color: accentColor, alpha: style.windowAlpha * 0.65 });
+      gfx.rect(x + 2, signY - 2, width - 4, 6);
+      gfx.fill({ color: accentColor, alpha: style.windowAlpha * 0.09 });
+    }
+  }
+
+  private drawHorizonHaze(gfx: Graphics, width: number, height: number) {
+    const y = height * 0.59;
+    gfx.rect(0, y - 2, width, 4);
+    gfx.fill({ color: 0x00e5ff, alpha: 0.06 });
+    gfx.rect(0, y + 2, width, 2);
+    gfx.fill({ color: 0xff007a, alpha: 0.035 });
+  }
+
+  private addFlicker(x: number, y: number, width: number, height: number, color: number, alpha: number) {
+    const light = new Graphics();
+    light.rect(x, y, width, height);
+    light.fill({ color, alpha });
+    this.flickerContainer.addChild(light);
+    this.flickers.push({
+      graphic: light,
+      baseAlpha: alpha,
+      flickerRate: 0.025 + this.rand() * 0.045,
+    });
+  }
+
+  private between(min: number, max: number): number {
+    return min + (max - min) * this.rand();
+  }
+
+  private rand(): number {
+    this.seed += 0x6d2b79f5;
+    let t = this.seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 }

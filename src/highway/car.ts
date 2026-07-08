@@ -1,10 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { CarConfig, VehicleType } from "../shared/types";
 
-// ─── Car sprite class ───
-// Each car is a Container with a body Graphics and a glow Graphics.
-// The vehicle type determines shape; color is applied to body + underglow.
-
 export class Car extends Container {
   public requestId: string;
   public method: string;
@@ -12,6 +8,8 @@ export class Car extends Container {
   public lane: number;
   public body: Graphics;
   public glow: Graphics;
+  public wheelLayer: Container;
+  public baseScale: number;
   public endX: number;
   public endY: number;
 
@@ -27,18 +25,21 @@ export class Car extends Container {
 
     this.body = new Graphics();
     this.glow = new Graphics();
+    this.wheelLayer = new Container();
 
     this.drawVehicle(config.vehicleType, config.color, config.scale);
+    this.baseScale = this.scale.x;
     this.position.set(config.startX, config.startY);
-    this.rotation = -0.34;
-    this.alpha = 0; // start invisible for fade-in animation
+    this.rotation = Math.PI - 0.41;
+    this.alpha = 0;
 
     this.addChild(this.glow);
     this.addChild(this.body);
+    this.addChild(this.wheelLayer);
   }
 
   private drawVehicle(type: VehicleType, color: number, scale: number) {
-    this.scale.set(scale * 1.45);
+    this.scale.set(scale * 0.9);
 
     switch (type) {
       case "sedan":
@@ -56,71 +57,86 @@ export class Car extends Container {
     }
   }
 
-  // ─── Sedan: low, sleek profile (GET requests) ───
-
   private drawSedan(color: number) {
-    this.drawUnderglow(color, 36, 13);
-    this.drawLowVehicle(38, 14, 8, color, 0x111322);
+    this.drawUnderglow(color, 44, 16);
+    this.drawLowVehicle(44, 15, 7, color, 0x121a2d);
   }
 
-  // ─── Truck: big, boxy (POST requests) ───
+  private drawSportsCar(color: number) {
+    this.drawUnderglow(color, 48, 14);
+    this.drawLowVehicle(48, 13, 6, color, 0x171025);
+
+    const g = this.body;
+    g.moveTo(0, -13);
+    g.lineTo(13, -6);
+    g.lineTo(-9, -4);
+    g.closePath();
+    g.fill({ color: 0xff007a, alpha: 0.28 });
+  }
 
   private drawTruck(color: number) {
     const g = this.body;
     const cargoColor = this.brightCargoColor(color);
 
-    this.drawUnderglow(cargoColor, 66, 18);
-    this.drawIsoBox(g, 0, -10, 48, 22, 9, cargoColor, 0x123525, 0x0a211e);
-    this.drawIsoBox(g, 48, -5, 18, 17, 7, 0x0f2840, 0x09172a, 0x0a1f36);
+    this.drawUnderglow(cargoColor, 82, 24);
+    this.drawIsoBox(g, -41, -17, 58, 27, 11, cargoColor, this.darken(cargoColor, 0.34), 0x102318);
+    this.drawIsoBox(g, 14, -10, 29, 21, 8, 0x163a5f, 0x0b2138, 0x091a2d);
 
-    g.rect(8, -1, 32, 3);
-    g.fill({ color: 0xcaff33, alpha: 0.45 });
-    g.rect(52, -2, 8, 5);
-    g.fill({ color: 0x64f8ff, alpha: 0.75 });
-    this.drawWheels([12, 34, 56], 14);
-    this.drawLights(66, 2);
+    g.rect(-31, -3, 38, 4);
+    g.fill({ color: 0xf2ff5a, alpha: 0.48 });
+    g.rect(-29, 5, 35, 3);
+    g.fill({ color: 0xffffff, alpha: 0.18 });
+    g.rect(20, -7, 11, 7);
+    g.fill({ color: 0x79faff, alpha: 0.7 });
+    g.rect(31, -4, 7, 9);
+    g.fill({ color: 0x031021, alpha: 0.75 });
+    g.rect(17, 7, 20, 3);
+    g.fill({ color: 0x00e5ff, alpha: 0.18 });
+
+    this.drawWheels([-31, -7, 20, 36], 13, 5.4);
+    this.drawLights(43, -3, -41);
   }
-
-  // ─── Sports car: low, wide, aggressive (DELETE requests) ───
-
-  private drawSportsCar(color: number) {
-    this.drawUnderglow(color, 42, 12);
-    this.drawLowVehicle(42, 12, 6, color, 0x120d22);
-  }
-
-  // ─── Bus: long, tall (PUT/PATCH requests) ───
 
   private drawBus(color: number) {
     const g = this.body;
     const busColor = this.brightCargoColor(color);
 
-    this.drawUnderglow(busColor, 62, 18);
-    this.drawIsoBox(g, 0, -9, 62, 20, 8, busColor, 0x15341e, 0x0b241b);
+    this.drawUnderglow(busColor, 78, 23);
+    this.drawIsoBox(g, -39, -16, 78, 25, 10, busColor, this.darken(busColor, 0.36), 0x102518);
 
-    for (let wx = 8; wx < 50; wx += 10) {
-      g.rect(wx, -2, 6, 5);
-      g.fill({ color: 0x63f8ff, alpha: 0.55 });
+    for (let wx = -29; wx < 20; wx += 10) {
+      g.rect(wx, -7, 6, 6);
+      g.fill({ color: 0x75f8ff, alpha: 0.5 });
     }
-    g.rect(52, -2, 7, 6);
-    g.fill({ color: 0x63f8ff, alpha: 0.7 });
-    this.drawWheels([12, 48, 58], 13);
-    this.drawLights(62, 2);
-  }
+    g.rect(25, -6, 8, 8);
+    g.fill({ color: 0x75f8ff, alpha: 0.72 });
+    g.rect(-30, 5, 48, 3);
+    g.fill({ color: 0xffffff, alpha: 0.18 });
 
-  // ─── Isometric neon vehicle helpers ───
+    this.drawWheels([-27, 7, 30], 12, 5.2);
+    this.drawLights(39, -2, -39);
+  }
 
   private drawLowVehicle(width: number, height: number, depth: number, color: number, cabinColor: number) {
     const g = this.body;
-    this.drawIsoBox(g, 0, 0, width, height, depth, color, this.darken(color), 0x090a14);
-    this.drawIsoBox(g, width * 0.34, -7, width * 0.34, 9, 4, cabinColor, 0x080b18, 0x090c19);
+    const x = -width * 0.5;
+    const y = -height * 0.5;
+    const sideColor = this.darken(color, 0.36);
 
-    g.rect(width * 0.38, -4, width * 0.18, 4);
-    g.fill({ color: 0x65f8ff, alpha: 0.65 });
-    g.rect(width * 0.12, 5, width * 0.65, 2);
-    g.fill({ color: 0xffffff, alpha: 0.22 });
+    this.drawIsoBox(g, x, y, width, height, depth, color, sideColor, 0x080b16);
+    this.drawIsoBox(g, x + width * 0.34, y - 8, width * 0.33, 10, 4, cabinColor, 0x0a1021, 0x08101e);
 
-    this.drawWheels([width * 0.22, width * 0.78], height + 2);
-    this.drawLights(width, 5);
+    g.rect(x + width * 0.12, y + height - 5, width * 0.68, 3);
+    g.fill({ color: this.darken(color, 0.24), alpha: 0.82 });
+    g.rect(x + width * 0.4, y - 5, width * 0.18, 4);
+    g.fill({ color: 0x72fbff, alpha: 0.66 });
+    g.rect(x + width * 0.08, y + 4, width * 0.62, 2);
+    g.fill({ color: 0xffffff, alpha: 0.24 });
+    g.rect(x + width * 0.16, y + 8, width * 0.34, 2);
+    g.fill({ color: 0x00e5ff, alpha: 0.22 });
+
+    this.drawWheels([x + width * 0.2, x + width * 0.78], y + height + 2, 4.5);
+    this.drawLights(x + width, y + 3, x);
   }
 
   private drawIsoBox(
@@ -154,53 +170,73 @@ export class Car extends Container {
     g.lineTo(x + width - depth, y + height);
     g.closePath();
     g.fill({ color: frontColor });
+
+    g.moveTo(x + depth, y);
+    g.lineTo(x + width, y);
+    g.lineTo(x + width, y + height - depth);
+    g.lineTo(x + width - depth, y + height);
+    g.lineTo(x, y + height - depth);
+    g.lineTo(x, y + depth);
+    g.closePath();
+    g.stroke({ color: 0xb9ffff, alpha: 0.22, width: 1 });
+
+    g.moveTo(x + depth + 3, y + 3);
+    g.lineTo(x + width - 5, y + 3);
+    g.stroke({ color: 0xffffff, alpha: 0.18, width: 1 });
   }
 
-  private drawWheels(xs: number[], y: number) {
-    const g = this.body;
-
+  private drawWheels(xs: number[], y: number, radius: number) {
     for (const x of xs) {
-      g.circle(x, y, 4);
-      g.fill({ color: 0x02030a });
-      g.circle(x, y, 2);
-      g.fill({ color: 0x31eaff, alpha: 0.95 });
-      g.circle(x, y, 6);
-      g.fill({ color: 0x00e5ff, alpha: 0.16 });
+      const wheel = new Graphics();
+      wheel.position.set(x, y);
+      wheel.ellipse(0, 0, radius + 2.3, radius * 0.72);
+      wheel.fill({ color: 0x00e5ff, alpha: 0.16 });
+      wheel.ellipse(0, 0, radius, radius * 0.55);
+      wheel.fill({ color: 0x02040a });
+      wheel.circle(0, 0, radius * 0.45);
+      wheel.fill({ color: 0x54efff, alpha: 0.95 });
+      wheel.rect(-radius * 0.8, -0.5, radius * 1.6, 1);
+      wheel.rect(-0.5, -radius * 0.8, 1, radius * 1.6);
+      wheel.fill({ color: 0xdbffff, alpha: 0.62 });
+      this.wheelLayer.addChild(wheel);
     }
   }
 
-  private drawLights(frontX: number, y: number) {
+  private drawLights(frontX: number, y: number, tailX: number) {
     const g = this.body;
 
-    g.circle(frontX, y, 2);
-    g.circle(frontX, y + 5, 2);
-    g.fill({ color: 0x9ffcff, alpha: 0.95 });
+    g.circle(frontX, y, 2.2);
+    g.circle(frontX, y + 5.8, 2.2);
+    g.fill({ color: 0xb8ffff, alpha: 0.96 });
+    g.circle(frontX + 2, y + 2.5, 6);
+    g.fill({ color: 0x00e5ff, alpha: 0.14 });
 
-    g.circle(0, y + 3, 2);
-    g.fill({ color: 0xff007a, alpha: 0.9 });
+    g.circle(tailX, y + 4, 2);
+    g.fill({ color: 0xff007a, alpha: 0.88 });
   }
 
   private drawUnderglow(color: number, width: number, height: number) {
     const g = this.glow;
 
-    g.ellipse(width * 0.5, height + 1, width * 0.58, 9);
-    g.fill({ color, alpha: 0.16 });
-
-    g.ellipse(width * 0.5, height + 2, width * 0.4, 4);
-    g.fill({ color, alpha: 0.28 });
+    g.ellipse(0, height * 0.48, width * 0.48, 7);
+    g.fill({ color: 0x000000, alpha: 0.36 });
+    g.ellipse(0, height * 0.38, width * 0.56, 10);
+    g.fill({ color, alpha: 0.13 });
+    g.ellipse(0, height * 0.42, width * 0.34, 4);
+    g.fill({ color, alpha: 0.26 });
   }
 
   private brightCargoColor(color: number): number {
-    if (color === 0xff0044) return 0xff007a;
-    if (color === 0xffcc00) return 0xe7ff29;
+    if (color === 0xff0044) return 0xff1270;
+    if (color === 0xffcc00) return 0xe7ff35;
     if (color === 0x222222) return 0x18a7ff;
-    return 0xa7f02a;
+    return 0xcaff33;
   }
 
-  private darken(color: number): number {
-    const r = ((color >> 16) & 0xff) * 0.35;
-    const g = ((color >> 8) & 0xff) * 0.35;
-    const b = (color & 0xff) * 0.35;
+  private darken(color: number, factor: number): number {
+    const r = ((color >> 16) & 0xff) * factor;
+    const g = ((color >> 8) & 0xff) * factor;
+    const b = (color & 0xff) * factor;
     return (Math.floor(r) << 16) | (Math.floor(g) << 8) | Math.floor(b);
   }
 }
