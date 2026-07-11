@@ -1,6 +1,13 @@
 import { Container, Graphics } from "pixi.js";
 import type { CarConfig, VehicleType } from "../shared/types";
 
+const ROAD_ANGLE = -0.39;
+const CAB_BLUE = 0x123a59;
+const CAB_SIDE = 0x07192a;
+const WINDOW_CYAN = 0x7bfaff;
+const HEADLIGHT = 0xbfffff;
+const TAILLIGHT = 0xff2a73;
+
 export class Car extends Container {
   public requestId: string;
   public method: string;
@@ -30,7 +37,7 @@ export class Car extends Container {
     this.drawVehicle(config.vehicleType, config.color, config.scale);
     this.baseScale = this.scale.x;
     this.position.set(config.startX, config.startY);
-    this.rotation = Math.PI - 0.41;
+    this.rotation = ROAD_ANGLE;
     this.alpha = 0;
 
     this.addChild(this.glow);
@@ -39,7 +46,7 @@ export class Car extends Container {
   }
 
   private drawVehicle(type: VehicleType, color: number, scale: number) {
-    this.scale.set(scale * 0.9);
+    this.scale.set(scale * 0.76);
 
     switch (type) {
       case "sedan":
@@ -58,178 +65,176 @@ export class Car extends Container {
   }
 
   private drawSedan(color: number) {
-    this.drawUnderglow(color, 44, 16);
-    this.drawLowVehicle(44, 15, 7, color, 0x121a2d);
+    const accent = this.vehicleAccent(color);
+    this.drawUnderglow(accent, 48, 16);
+    this.drawLowCar(-25, 0, 50, 13, accent, color === 0xff0044 ? 0xff2a73 : 0x53f3ff);
   }
 
   private drawSportsCar(color: number) {
-    this.drawUnderglow(color, 48, 14);
-    this.drawLowVehicle(48, 13, 6, color, 0x171025);
+    const accent = color === 0xff0044 ? 0xff2a73 : this.vehicleAccent(color);
+    this.drawUnderglow(accent, 54, 14);
+    this.drawLowCar(-28, 0, 56, 12, accent, 0xff2a73);
 
     const g = this.body;
-    g.moveTo(0, -13);
-    g.lineTo(13, -6);
-    g.lineTo(-9, -4);
+    g.moveTo(7, -18);
+    g.lineTo(24, -11);
+    g.lineTo(-2, -8);
     g.closePath();
-    g.fill({ color: 0xff007a, alpha: 0.28 });
+    g.fill({ color: 0xff2a73, alpha: 0.2 });
   }
 
   private drawTruck(color: number) {
+    const cargo = this.vehicleAccent(color);
+
+    this.drawUnderglow(cargo, 90, 25);
+    this.drawCab(-43, 0, 25, 17, color === 0xff0044 ? 0x3a1638 : CAB_BLUE);
+    this.drawBox(this.body, -18, 0, 60, 24, 8, cargo, this.darken(cargo, 0.36), this.darken(cargo, 0.24));
+
     const g = this.body;
-    const cargoColor = this.brightCargoColor(color);
-
-    this.drawUnderglow(cargoColor, 82, 24);
-    this.drawIsoBox(g, -41, -17, 58, 27, 11, cargoColor, this.darken(cargoColor, 0.34), 0x102318);
-    this.drawIsoBox(g, 14, -10, 29, 21, 8, 0x163a5f, 0x0b2138, 0x091a2d);
-
-    g.rect(-31, -3, 38, 4);
-    g.fill({ color: 0xf2ff5a, alpha: 0.48 });
-    g.rect(-29, 5, 35, 3);
+    g.rect(-8, -12, 40, 4);
+    g.fill({ color: 0xf5ff70, alpha: 0.58 });
+    g.rect(-7, -5, 37, 3);
     g.fill({ color: 0xffffff, alpha: 0.18 });
-    g.rect(20, -7, 11, 7);
-    g.fill({ color: 0x79faff, alpha: 0.7 });
-    g.rect(31, -4, 7, 9);
-    g.fill({ color: 0x031021, alpha: 0.75 });
-    g.rect(17, 7, 20, 3);
-    g.fill({ color: 0x00e5ff, alpha: 0.18 });
+    g.rect(34, -16, 4, 11);
+    g.fill({ color: 0x0a1a12, alpha: 0.38 });
 
-    this.drawWheels([-31, -7, 20, 36], 13, 5.4);
-    this.drawLights(43, -3, -41);
+    this.drawWheels([-36, -18, 8, 32], 1, 4);
+    this.drawLights(-45, -8, 43, -9);
   }
 
   private drawBus(color: number) {
+    const busColor = this.vehicleAccent(color);
+
+    this.drawUnderglow(busColor, 86, 24);
+    this.drawBox(this.body, -42, 0, 84, 23, 8, busColor, this.darken(busColor, 0.34), this.darken(busColor, 0.24));
+
     const g = this.body;
-    const busColor = this.brightCargoColor(color);
-
-    this.drawUnderglow(busColor, 78, 23);
-    this.drawIsoBox(g, -39, -16, 78, 25, 10, busColor, this.darken(busColor, 0.36), 0x102518);
-
-    for (let wx = -29; wx < 20; wx += 10) {
-      g.rect(wx, -7, 6, 6);
-      g.fill({ color: 0x75f8ff, alpha: 0.5 });
+    for (let wx = -31; wx <= 15; wx += 10) {
+      g.rect(wx, -17, 6, 6);
+      g.fill({ color: WINDOW_CYAN, alpha: 0.55 });
     }
-    g.rect(25, -6, 8, 8);
-    g.fill({ color: 0x75f8ff, alpha: 0.72 });
-    g.rect(-30, 5, 48, 3);
+    g.rect(27, -16, 9, 8);
+    g.fill({ color: WINDOW_CYAN, alpha: 0.72 });
+    g.rect(-30, -6, 52, 3);
     g.fill({ color: 0xffffff, alpha: 0.18 });
 
-    this.drawWheels([-27, 7, 30], 12, 5.2);
-    this.drawLights(39, -2, -39);
+    this.drawWheels([-30, 4, 31], 1, 4);
+    this.drawLights(-43, -8, 43, -9);
   }
 
-  private drawLowVehicle(width: number, height: number, depth: number, color: number, cabinColor: number) {
+  private drawLowCar(x: number, y: number, width: number, height: number, color: number, roofColor: number) {
     const g = this.body;
-    const x = -width * 0.5;
-    const y = -height * 0.5;
-    const sideColor = this.darken(color, 0.36);
 
-    this.drawIsoBox(g, x, y, width, height, depth, color, sideColor, 0x080b16);
-    this.drawIsoBox(g, x + width * 0.34, y - 8, width * 0.33, 10, 4, cabinColor, 0x0a1021, 0x08101e);
+    this.drawBox(g, x, y, width, height, 6, color, this.darken(color, 0.35), 0x07101d);
+    this.drawBox(g, x + width * 0.34, y - height + 1, width * 0.32, 9, 4, 0x12172a, 0x090d1a, 0x070b16);
 
-    g.rect(x + width * 0.12, y + height - 5, width * 0.68, 3);
-    g.fill({ color: this.darken(color, 0.24), alpha: 0.82 });
-    g.rect(x + width * 0.4, y - 5, width * 0.18, 4);
-    g.fill({ color: 0x72fbff, alpha: 0.66 });
-    g.rect(x + width * 0.08, y + 4, width * 0.62, 2);
-    g.fill({ color: 0xffffff, alpha: 0.24 });
-    g.rect(x + width * 0.16, y + 8, width * 0.34, 2);
-    g.fill({ color: 0x00e5ff, alpha: 0.22 });
+    g.rect(x + width * 0.39, y - height - 4, width * 0.18, 4);
+    g.fill({ color: WINDOW_CYAN, alpha: 0.66 });
+    g.rect(x + width * 0.12, y - 6, width * 0.56, 2);
+    g.fill({ color: 0xffffff, alpha: 0.22 });
+    g.rect(x + width * 0.08, y - height - 1, width * 0.26, 3);
+    g.fill({ color: roofColor, alpha: 0.72 });
 
-    this.drawWheels([x + width * 0.2, x + width * 0.78], y + height + 2, 4.5);
-    this.drawLights(x + width, y + 3, x);
+    this.drawWheels([x + width * 0.2, x + width * 0.78], y + 1, 3.5);
+    this.drawLights(x - 1, y - 6, x + width + 1, y - 7);
   }
 
-  private drawIsoBox(
+  private drawCab(x: number, y: number, width: number, height: number, color: number) {
+    const g = this.body;
+
+    this.drawBox(g, x, y, width, height, 6, color, CAB_SIDE, 0x071422);
+    g.rect(x + 6, y - height + 4, 9, 7);
+    g.fill({ color: WINDOW_CYAN, alpha: 0.72 });
+    g.rect(x + width - 8, y - height + 6, 5, 8);
+    g.fill({ color: 0x040b14, alpha: 0.55 });
+    g.rect(x + 5, y - 5, width - 10, 2);
+    g.fill({ color: 0x5ff6ff, alpha: 0.28 });
+  }
+
+  private drawBox(
     g: Graphics,
     x: number,
     y: number,
     width: number,
     height: number,
     depth: number,
-    topColor: number,
     sideColor: number,
-    frontColor: number
+    shadeColor: number,
+    endColor: number
   ) {
-    g.moveTo(x + depth, y);
-    g.lineTo(x + width, y);
-    g.lineTo(x + width - depth, y + depth);
-    g.lineTo(x, y + depth);
-    g.closePath();
-    g.fill({ color: topColor });
+    const roofLift = depth * 0.7;
 
-    g.moveTo(x, y + depth);
-    g.lineTo(x + width - depth, y + depth);
-    g.lineTo(x + width - depth, y + height);
-    g.lineTo(x, y + height - depth);
-    g.closePath();
+    g.rect(x, y - height, width, height);
     g.fill({ color: sideColor });
 
-    g.moveTo(x + width - depth, y + depth);
-    g.lineTo(x + width, y);
-    g.lineTo(x + width, y + height - depth);
-    g.lineTo(x + width - depth, y + height);
+    g.moveTo(x, y - height);
+    g.lineTo(x + depth, y - height - roofLift);
+    g.lineTo(x + width + depth, y - height - roofLift);
+    g.lineTo(x + width, y - height);
     g.closePath();
-    g.fill({ color: frontColor });
+    g.fill({ color: this.lighten(sideColor, 1.18), alpha: 0.92 });
 
-    g.moveTo(x + depth, y);
+    g.moveTo(x + width, y - height);
+    g.lineTo(x + width + depth, y - height - roofLift);
+    g.lineTo(x + width + depth, y - roofLift);
     g.lineTo(x + width, y);
-    g.lineTo(x + width, y + height - depth);
-    g.lineTo(x + width - depth, y + height);
-    g.lineTo(x, y + height - depth);
-    g.lineTo(x, y + depth);
     g.closePath();
-    g.stroke({ color: 0xb9ffff, alpha: 0.22, width: 1 });
+    g.fill({ color: endColor, alpha: 0.92 });
 
-    g.moveTo(x + depth + 3, y + 3);
-    g.lineTo(x + width - 5, y + 3);
-    g.stroke({ color: 0xffffff, alpha: 0.18, width: 1 });
+    g.moveTo(x, y - height);
+    g.lineTo(x + depth, y - height - roofLift);
+    g.lineTo(x + width + depth, y - height - roofLift);
+    g.lineTo(x + width + depth, y - roofLift);
+    g.lineTo(x + width, y);
+    g.lineTo(x, y);
+    g.closePath();
+    g.stroke({ color: 0xb6ffff, alpha: 0.23, width: 1 });
+
+    g.rect(x + 2, y - 2, width - 4, 2);
+    g.fill({ color: shadeColor, alpha: 0.68 });
   }
 
   private drawWheels(xs: number[], y: number, radius: number) {
+    const g = this.body;
+
     for (const x of xs) {
-      const wheel = new Graphics();
-      wheel.position.set(x, y);
-      wheel.ellipse(0, 0, radius + 2.3, radius * 0.72);
-      wheel.fill({ color: 0x00e5ff, alpha: 0.16 });
-      wheel.ellipse(0, 0, radius, radius * 0.55);
-      wheel.fill({ color: 0x02040a });
-      wheel.circle(0, 0, radius * 0.45);
-      wheel.fill({ color: 0x54efff, alpha: 0.95 });
-      wheel.rect(-radius * 0.8, -0.5, radius * 1.6, 1);
-      wheel.rect(-0.5, -radius * 0.8, 1, radius * 1.6);
-      wheel.fill({ color: 0xdbffff, alpha: 0.62 });
-      this.wheelLayer.addChild(wheel);
+      g.circle(x, y + 1, radius + 2);
+      g.fill({ color: 0x00e5ff, alpha: 0.13 });
+      g.circle(x, y, radius);
+      g.fill({ color: 0x02040a, alpha: 0.96 });
+      g.circle(x, y, radius * 0.48);
+      g.fill({ color: 0x6ff7ff, alpha: 0.95 });
     }
   }
 
-  private drawLights(frontX: number, y: number, tailX: number) {
+  private drawLights(frontX: number, frontY: number, rearX: number, rearY: number) {
     const g = this.body;
 
-    g.circle(frontX, y, 2.2);
-    g.circle(frontX, y + 5.8, 2.2);
-    g.fill({ color: 0xb8ffff, alpha: 0.96 });
-    g.circle(frontX + 2, y + 2.5, 6);
-    g.fill({ color: 0x00e5ff, alpha: 0.14 });
+    g.circle(frontX, frontY, 1.8);
+    g.circle(frontX, frontY + 4.5, 1.8);
+    g.fill({ color: HEADLIGHT, alpha: 0.96 });
+    g.circle(frontX - 2, frontY + 2, 5);
+    g.fill({ color: 0x00e5ff, alpha: 0.12 });
 
-    g.circle(tailX, y + 4, 2);
-    g.fill({ color: 0xff007a, alpha: 0.88 });
+    g.circle(rearX, rearY, 1.8);
+    g.fill({ color: TAILLIGHT, alpha: 0.88 });
   }
 
   private drawUnderglow(color: number, width: number, height: number) {
     const g = this.glow;
 
-    g.ellipse(0, height * 0.48, width * 0.48, 7);
-    g.fill({ color: 0x000000, alpha: 0.36 });
-    g.ellipse(0, height * 0.38, width * 0.56, 10);
+    g.ellipse(0, height * 0.2, width * 0.5, 7);
+    g.fill({ color: 0x000000, alpha: 0.34 });
+    g.ellipse(0, height * 0.08, width * 0.55, 9);
     g.fill({ color, alpha: 0.13 });
-    g.ellipse(0, height * 0.42, width * 0.34, 4);
-    g.fill({ color, alpha: 0.26 });
+    g.ellipse(0, height * 0.12, width * 0.34, 4);
+    g.fill({ color, alpha: 0.24 });
   }
 
-  private brightCargoColor(color: number): number {
-    if (color === 0xff0044) return 0xff1270;
-    if (color === 0xffcc00) return 0xe7ff35;
-    if (color === 0x222222) return 0x18a7ff;
+  private vehicleAccent(color: number): number {
+    if (color === 0xff0044) return 0xff2a73;
+    if (color === 0xffcc00) return 0xeaff45;
+    if (color === 0x222222) return 0x35bfff;
     return 0xcaff33;
   }
 
@@ -237,6 +242,13 @@ export class Car extends Container {
     const r = ((color >> 16) & 0xff) * factor;
     const g = ((color >> 8) & 0xff) * factor;
     const b = (color & 0xff) * factor;
+    return (Math.floor(r) << 16) | (Math.floor(g) << 8) | Math.floor(b);
+  }
+
+  private lighten(color: number, factor: number): number {
+    const r = Math.min(255, ((color >> 16) & 0xff) * factor);
+    const g = Math.min(255, ((color >> 8) & 0xff) * factor);
+    const b = Math.min(255, (color & 0xff) * factor);
     return (Math.floor(r) << 16) | (Math.floor(g) << 8) | Math.floor(b);
   }
 }

@@ -128,12 +128,6 @@ function classifyCrashColor(statusCode: number): number {
 
 function startDriveEffects(car: Car): gsap.core.Tween[] {
   return [
-    gsap.to(car.wheelLayer.children, {
-      rotation: "-=6.283",
-      duration: 0.22,
-      ease: "none",
-      repeat: -1,
-    }),
     gsap.to(car.body, {
       y: -0.55,
       duration: 0.24,

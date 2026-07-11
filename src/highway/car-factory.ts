@@ -26,11 +26,19 @@ export function classifyColor(statusCode: number): number {
   return 0x222222; // dark = error/no status
 }
 
-export function classifyLane(duration: number): number {
-  // Lane 0 = fast (top), Lane 1 = normal, Lane 2 = slow (bottom)
-  if (duration < 100) return 0;
-  if (duration < 500) return 1;
-  return 2;
+export function classifyLane(method: string): number {
+  // Lane 0/1 = small cars, Lane 2 = trucks and heavy traffic.
+  switch (method.toUpperCase()) {
+    case "POST":
+    case "PUT":
+    case "PATCH":
+      return 2;
+    case "DELETE":
+      return 1;
+    case "GET":
+    default:
+      return 0;
+  }
 }
 
 export function classifyScale(responseSize: number): number {
@@ -51,12 +59,14 @@ export function createCarFromRequest(
 ): Car {
   const vehicleType = classifyVehicle(request.method);
   const color = classifyColor(request.statusCode);
-  const lane = classifyLane(request.duration);
+  const lane = classifyLane(request.method);
   const scale = classifyScale(request.responseSize);
 
   // Add slight y-offset within lane so concurrent requests do not perfectly overlap.
   const lanePath = lanePaths[lane] ?? lanePaths[0];
-  const yOffset = (Math.random() - 0.5) * 6;
+  const jitter = (Math.random() - 0.5) * 4;
+  const laneXOffset = lane === 2 ? -8 : 0;
+  const laneYOffset = lane === 2 ? 14 : lane === 1 ? -2 : -4;
 
   return new Car({
     requestId: request.requestId,
@@ -66,9 +76,9 @@ export function createCarFromRequest(
     color,
     lane,
     scale,
-    startX: lanePath.startX,
-    startY: lanePath.startY + yOffset,
-    endX: lanePath.endX,
-    endY: lanePath.endY + yOffset,
+    startX: lanePath.startX + laneXOffset,
+    startY: lanePath.startY + laneYOffset + jitter,
+    endX: lanePath.endX + laneXOffset,
+    endY: lanePath.endY + laneYOffset + jitter,
   });
 }

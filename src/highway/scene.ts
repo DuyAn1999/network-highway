@@ -3,7 +3,7 @@ import type { LanePath, NetworkRequest } from "../shared/types";
 import { CityBackground } from "./city-background";
 import { HighwayRoad } from "./highway-road";
 import { createRoadGeometry } from "./road-model";
-import { createCarFromRequest } from "./car-factory";
+import { classifyLane, createCarFromRequest } from "./car-factory";
 import 'pixi.js/unsafe-eval';
 import { animateCarEnter, animateCrash, animateCarExit } from "./animations";
 
@@ -150,9 +150,7 @@ export class HighwayScene {
   }
 
   private laneForRequest(request: NetworkRequest): number {
-    if (request.duration < 100) return 0;
-    if (request.duration < 500) return 1;
-    return 2;
+    return classifyLane(request.method);
   }
 
   private lerp(a: number, b: number, t: number) {
